@@ -57,6 +57,7 @@ GESTURE_COLORS = {
     Gesture.PINCH_DRAG:       (0, 200, 255),
     Gesture.PINCH_RIGHT:      (100, 0, 255),
     Gesture.POINT:            (0, 80, 255),
+    Gesture.V_SIGN:           (255, 120, 40),
     Gesture.OPEN_PALM:        (0, 255, 140),
     Gesture.FIST:             (0, 60, 255),
     Gesture.FIST_THUMB_LEFT:  (255, 200, 0),
@@ -361,6 +362,9 @@ def main():
                     if entered == Gesture.FIST:
                         actions.toggle_black_screen()
                         last_action, last_action_until = "BLACK SCREEN", time.monotonic() + 1.2
+                    elif entered == Gesture.V_SIGN:
+                        actions.mission_control()
+                        last_action, last_action_until = "MISSION CONTROL", time.monotonic() + 1.5
                     elif entered == Gesture.FIST_THUMB_UP:
                         actions.toggle_media()
                         last_action, last_action_until = "PLAY / PAUSE", time.monotonic() + 1.2

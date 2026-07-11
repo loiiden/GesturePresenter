@@ -17,6 +17,7 @@ PINKY_MCP  = 17; PINKY_PIP  = 18; PINKY_TIP  = 20
 class Gesture(str, Enum):
     NONE             = "none"
     POINT            = "point"             # index only          → laser pointer
+    V_SIGN           = "v_sign"            # index + middle held → Mission Control
     PINCH            = "pinch"             # thumb+index still   → click on release
     PINCH_DRAG       = "pinch_drag"
     PINCH_RIGHT      = "pinch_right"       # thumb+middle        → right-click
@@ -131,6 +132,8 @@ class GestureClassifier:
             return Gesture.OPEN_PALM, {}
         if ext[0] and not any(ext[1:]):
             return Gesture.POINT, {"pos": tip_pos}
+        if ext[0] and ext[1] and not ext[2] and not ext[3]:
+            return Gesture.V_SIGN, {}
         if not any(ext):
             direction = _thumb_direction(lms)
             if direction == "up":
@@ -224,6 +227,7 @@ class PinchTracker:
 
 HOLD_FRAMES: dict[Gesture, int] = {
     Gesture.POINT:            2,
+    Gesture.V_SIGN:          18,
     Gesture.PINCH:            3,
     Gesture.PINCH_RIGHT:      3,
     Gesture.OPEN_PALM:        12,
