@@ -10,6 +10,7 @@ from pathlib import Path
 import webview
 
 from config import APP_NAME, AppConfig
+from devices import list_cameras, list_displays
 
 
 def _tracking_process(config: AppConfig, stop_event, ui_queue) -> None:
@@ -45,7 +46,11 @@ class AppApi:
             "voiceAvailable": self.voice_available,
             "running": self._running(),
             "message": self.message,
+            "devices": self.refresh_devices(),
         }
+
+    def refresh_devices(self) -> dict:
+        return {"cameras": list_cameras(), "displays": list_displays()}
 
     def save_config(self, values: dict) -> dict:
         allowed = AppConfig.__dataclass_fields__

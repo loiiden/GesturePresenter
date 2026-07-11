@@ -2,13 +2,17 @@ const $ = id => document.getElementById(id);
 let running = false;
 
 function values() { return { mode:$('mode').value, voice_enabled:$('voice').checked, camera_index:Number($('camera').value), display_index:Number($('display').value), mirror_camera:$('mirror').checked }; }
-function apply(config) { $('mode').value=config.mode; $('voice').checked=config.voice_enabled; $('camera').value=config.camera_index; $('display').value=config.display_index; $('mirror').checked=config.mirror_camera; }
+function options(select, items, selected) { select.innerHTML=''; items.forEach(item=>{ const option=document.createElement('option'); option.value=item.id; option.textContent=item.label; option.selected=Number(item.id)===Number(selected); select.appendChild(option); }); }
+function applyDevices(devices, config) { options($('camera'),devices.cameras,config.camera_index); options($('display'),devices.displays,config.display_index); }
+function selectKnown(id,value) { const select=$(id); select.value=value; if(select.selectedIndex<0) select.selectedIndex=0; }
+function apply(config) { $('mode').value=config.mode; $('voice').checked=config.voice_enabled; selectKnown('camera',config.camera_index); selectKnown('display',config.display_index); $('mirror').checked=config.mirror_camera; }
 function setRunning(value) { running=value; $('startButton').textContent=value?'Stop tracking':'Start presentation'; $('startButton').classList.toggle('stop',value); $('statusBadge').classList.toggle('running',value); $('statusBadge').querySelector('span').textContent=value?'Live':'Ready'; }
 
 async function init() {
-  const state=await window.pywebview.api.initial_state(); apply(state.config); setRunning(state.running);
+  const state=await window.pywebview.api.initial_state(); applyDevices(state.devices,state.config); apply(state.config); setRunning(state.running);
   if(!state.voiceAvailable){ $('voiceRow').classList.add('disabled'); $('voice').checked=false; $('voiceHint').textContent='Voice components are not installed'; }
   document.querySelectorAll('select,input').forEach(el=>el.addEventListener('change',()=>window.pywebview.api.save_config(values())));
+  $('refreshDevices').onclick=async()=>{ const devices=await window.pywebview.api.refresh_devices(); const current=values(); applyDevices(devices,current); };
   $('startButton').onclick=async()=>{ if(running) await window.pywebview.api.stop_tracking(); else await window.pywebview.api.start_tracking(values()); };
   setInterval(poll,120);
 }

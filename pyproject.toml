@@ -28,7 +28,7 @@ build = ["pyinstaller>=6.8"]
 gesture-presenter = "app:main"
 
 [tool.setuptools]
-py-modules = ["app", "config", "hand_tracker", "gestures", "actions", "speech"]
+py-modules = ["app", "config", "devices", "hand_tracker", "gestures", "actions", "speech"]
 
 [tool.setuptools.data-files]
 "gesture_presenter" = ["hand_landmarker.task", "frontend/index.html", "frontend/styles.css", "frontend/app.js"]

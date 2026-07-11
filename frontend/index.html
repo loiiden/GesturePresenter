@@ -15,13 +15,11 @@
 
     <section class="layout">
       <aside class="settings card">
-        <div class="section-title"><span>Session setup</span><small>Camera stays off until Start</small></div>
+        <div class="section-title"><span>Session setup</span><button id="refreshDevices" class="text-button">Refresh devices</button></div>
 
         <label>Mode<select id="mode"><option value="presentation">Presentation</option></select></label>
-        <div class="two-columns">
-          <label>Camera<input id="camera" type="number" min="0" max="9" value="0"></label>
-          <label>Display<input id="display" type="number" min="0" max="9" value="0"></label>
-        </div>
+        <label>Camera<select id="camera"></select><small class="field-help">The camera used to recognize your gestures</small></label>
+        <label>Presentation display<select id="display"></select><small class="field-help">The screen where pointer movement will be mapped</small></label>
 
         <label class="toggle-row"><span><b>Mirror preview</b><small>Natural, selfie-style movement</small></span><input id="mirror" type="checkbox"><i></i></label>
         <label id="voiceRow" class="toggle-row"><span><b>Local voice control</b><small id="voiceHint">Whisper runs only when enabled</small></span><input id="voice" type="checkbox"><i></i></label>

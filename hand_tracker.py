@@ -19,6 +19,7 @@ from gestures import (
 )
 import actions
 from config import AppConfig
+from devices import display_rects
 
 pyautogui.FAILSAFE = False
 
@@ -67,15 +68,14 @@ GESTURE_COLORS = {
 
 def get_display_rect(index: int) -> tuple[int, int, int, int]:
     try:
-        from screeninfo import get_monitors
-        monitors = get_monitors()
-        if not monitors:
+        displays = display_rects()
+        if not displays or displays[0]["width"] == 0:
             raise RuntimeError("No displays detected")
-        if index >= len(monitors):
-            index = next((i for i, monitor in enumerate(monitors)
-                          if monitor.is_primary), 0)
-        monitor = monitors[index]
-        return monitor.x, monitor.y, monitor.width, monitor.height
+        if index >= len(displays):
+            index = next((i for i, display in enumerate(displays)
+                          if display["primary"]), 0)
+        display = displays[index]
+        return display["x"], display["y"], display["width"], display["height"]
     except Exception as exc:
         print(f"Display detection fallback: {exc}")
         width, height = pyautogui.size()
