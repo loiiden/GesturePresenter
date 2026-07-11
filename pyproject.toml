@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gesture-presenter"
+version = "0.1.0"
+description = "Cross-platform gesture controller for presentations"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "mediapipe>=0.10.14",
+  "opencv-python>=4.9",
+  "pyautogui>=0.9.54",
+  "pyperclip>=1.8",
+  "screeninfo>=0.8.1",
+]
+
+[project.optional-dependencies]
+voice = [
+  "faster-whisper>=1.0",
+  "numpy>=1.26",
+  "sounddevice>=0.4.7",
+]
+build = ["pyinstaller>=6.8"]
+
+[project.gui-scripts]
+gesture-presenter = "app:main"
+
+[tool.setuptools]
+py-modules = ["app", "config", "hand_tracker", "gestures", "actions", "speech"]
+
+[tool.setuptools.data-files]
+"gesture_presenter" = ["hand_landmarker.task"]

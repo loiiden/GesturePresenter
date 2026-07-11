@@ -1,0 +1,26 @@
+name: Build desktop application
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install application and builder
+        run: python -m pip install ".[voice,build]"
+      - name: Build native application
+        run: pyinstaller --noconfirm GesturePresenter.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GesturePresenter-${{ runner.os }}
+          path: dist/

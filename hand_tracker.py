@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import os
+import sys
 import threading
 import urllib.request
 import time
@@ -6,7 +9,6 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
-import Quartz
 import pyautogui
 
 from gestures import (
@@ -14,30 +16,25 @@ from gestures import (
     INDEX_TIP, is_open_palm, is_fist,
 )
 import actions
-from speech import SpeechRecognizer
+from config import AppConfig
 
 pyautogui.FAILSAFE = False
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "hand_landmarker.task")
+_BUNDLE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+_MODEL_CANDIDATES = (
+    os.path.join(_BUNDLE_DIR, "hand_landmarker.task"),
+    os.path.join(sys.prefix, "gesture_presenter", "hand_landmarker.task"),
+)
+MODEL_PATH = next((path for path in _MODEL_CANDIDATES if os.path.exists(path)),
+                  _MODEL_CANDIDATES[0])
 MODEL_URL  = (
     "https://storage.googleapis.com/mediapipe-models/"
     "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 )
 
-TARGET_DISPLAY     = 1     # change to 1 for external display
-SMOOTH             = 0.35  # used only in precision mode
-PRECISION_DIVISOR  = 2     # cursor movement scale in precision mode
+SMOOTH             = 0.35  # pointer smoothing
 PALM_HOLD_FRAMES   = 24    # deliberate left-palm hold toggles presentation controls
 FIST_HOLD_FRAMES   = 15    # left-hand frames needed to start/stop recording
-
-# Acceleration curve for normal cursor mode (delta-based, like a mouse)
-# scale = ACCEL_BASE + ACCEL_GAIN * (speed / ACCEL_NORM)²
-ACCEL_BASE  = 0.4   # multiplier at near-zero speed (slow = precise)
-ACCEL_GAIN  = 1.0   # how aggressively fast movements are amplified
-ACCEL_NORM  = 0.04  # reference speed (normalised units/frame) for the gain
-MAX_DELTA   = 0.08  # cap per-frame hand delta to absorb re-detection jumps
-CURSOR_DEADZONE = 0.0015  # suppress landmark shimmer while holding still
-CURSOR_FILTER = 0.45      # low-pass filter for hand deltas
 
 # Fraction of the camera frame (each side) that is ignored.
 # 0.2 means only the central 60% of the camera maps to the full screen.
@@ -67,22 +64,20 @@ GESTURE_COLORS = {
 
 
 def get_display_rect(index: int) -> tuple[int, int, int, int]:
-    _, display_ids, _ = Quartz.CGGetActiveDisplayList(16, None, None)
-    print("Detected displays:")
-    for i, did in enumerate(display_ids):
-        b = Quartz.CGDisplayBounds(did)
-        tag = " [main]" if Quartz.CGDisplayIsMain(did) else ""
-        print(f"  [{i}]  {int(b.size.width)}x{int(b.size.height)}"
-              f"  origin=({int(b.origin.x)},{int(b.origin.y)}){tag}")
-    if not display_ids:
-        raise RuntimeError("No active display detected")
-    if index >= len(display_ids):
-        print(f"Display [{index}] is unavailable; using the main display.")
-        index = next((i for i, did in enumerate(display_ids)
-                      if Quartz.CGDisplayIsMain(did)), 0)
-    did = display_ids[index]
-    b   = Quartz.CGDisplayBounds(did)
-    return int(b.origin.x), int(b.origin.y), int(b.size.width), int(b.size.height)
+    try:
+        from screeninfo import get_monitors
+        monitors = get_monitors()
+        if not monitors:
+            raise RuntimeError("No displays detected")
+        if index >= len(monitors):
+            index = next((i for i, monitor in enumerate(monitors)
+                          if monitor.is_primary), 0)
+        monitor = monitors[index]
+        return monitor.x, monitor.y, monitor.width, monitor.height
+    except Exception as exc:
+        print(f"Display detection fallback: {exc}")
+        width, height = pyautogui.size()
+        return 0, 0, width, height
 
 
 def cam_to_screen(nx: float, ny: float, disp_x, disp_y, scr_w, scr_h) -> tuple[float, float]:
@@ -195,7 +190,8 @@ def draw_speech_overlay(frame, state: str, text: str, dot_on: bool):
                     font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
 
 
-def main():
+def run(app_config: AppConfig | None = None, stop_event=None):
+    app_config = app_config or AppConfig.load()
     if not os.path.exists(MODEL_PATH):
         download_model()
 
@@ -219,10 +215,16 @@ def main():
             speech_state = "overlay"
             pending_text = text
 
-    recognizer = SpeechRecognizer(on_result=_on_result, on_transcribing=_on_transcribing)
+    recognizer = None
+    if app_config.voice_enabled:
+        # Keep Whisper and audio libraries completely out of gesture-only mode.
+        from speech import SpeechRecognizer
+        recognizer = SpeechRecognizer(
+            on_result=_on_result, on_transcribing=_on_transcribing
+        )
 
-    disp_x, disp_y, scr_w, scr_h = get_display_rect(TARGET_DISPLAY)
-    print(f"Mapping to display [{TARGET_DISPLAY}]  "
+    disp_x, disp_y, scr_w, scr_h = get_display_rect(app_config.display_index)
+    print(f"Mapping to display [{app_config.display_index}]  "
           f"origin=({disp_x},{disp_y})  size={scr_w}x{scr_h}\n")
 
     options = vision.HandLandmarkerOptions(
@@ -238,7 +240,9 @@ def main():
     pinch_track = PinchTracker()
     swipe_track = PalmSwipeTracker()
 
-    cap          = cv2.VideoCapture(0)
+    cap          = cv2.VideoCapture(app_config.camera_index)
+    if not cap.isOpened():
+        raise RuntimeError(f"Unable to open camera {app_config.camera_index}")
     frame_idx    = 0
     cx           = disp_x + scr_w / 2
     cy           = disp_y + scr_h / 2
@@ -253,19 +257,20 @@ def main():
     left_fist_count = 0
     left_fist_held  = False
 
-    prev_pos_norm = None
-    filtered_delta = (0.0, 0.0)
     lost_right_frames = 0
 
     cv2.namedWindow("Hand Tracker", cv2.WINDOW_AUTOSIZE)
 
     with vision.HandLandmarker.create_from_options(options) as landmarker:
         while cap.isOpened():
+            if stop_event is not None and stop_event.is_set():
+                break
             ok, frame = cap.read()
             if not ok:
                 break
 
-            frame  = cv2.flip(frame, 1)
+            if app_config.mirror_camera:
+                frame = cv2.flip(frame, 1)
             rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
@@ -278,7 +283,11 @@ def main():
             right_lms = left_lms = None
             for i, hand_lms in enumerate(result.hand_landmarks):
                 label = result.handedness[i][0].category_name
-                if label == "Left":
+                # Handedness labels reverse when the image is mirrored.
+                controls_right_hand = (
+                    label == "Left" if app_config.mirror_camera else label == "Right"
+                )
+                if controls_right_hand:
                     right_lms = hand_lms
                 else:
                     left_lms = hand_lms
@@ -297,7 +306,7 @@ def main():
             left_palm_held = palm_held
 
             # ── Left hand: fist → start/stop speech recording ─────────
-            if left_lms and is_fist(left_lms):
+            if recognizer is not None and left_lms and is_fist(left_lms):
                 left_fist_count = min(left_fist_count + 1, FIST_HOLD_FRAMES)
             else:
                 left_fist_count = max(left_fist_count - 1, 0)
@@ -387,13 +396,10 @@ def main():
                     cy += SMOOTH * (ty - cy)
                     actions.move_cursor(int(cx), int(cy))
 
-                prev_pos_norm = pos_norm
             else:
                 swipe_track.update(False, (0.0, 0.0))
                 lost_right_frames += 1
                 if lost_right_frames >= 3:
-                    prev_pos_norm = None
-                    filtered_delta = (0.0, 0.0)
                     pinch_track.reset()
 
             # ── Draw overlays and show the window ──────────────────────
@@ -424,6 +430,10 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+
+
+def main():
+    run(AppConfig.load())
 
 
 if __name__ == "__main__":
