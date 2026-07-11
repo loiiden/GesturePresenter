@@ -2,7 +2,6 @@ import os
 import threading
 import urllib.request
 import time
-import math
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
@@ -11,7 +10,7 @@ import Quartz
 import pyautogui
 
 from gestures import (
-    Gesture, GestureClassifier, GestureStateMachine, PinchTracker,
+    Gesture, GestureClassifier, GestureStateMachine, PinchTracker, PalmSwipeTracker,
     INDEX_TIP, is_open_palm, is_fist,
 )
 import actions
@@ -28,7 +27,7 @@ MODEL_URL  = (
 TARGET_DISPLAY     = 1     # change to 1 for external display
 SMOOTH             = 0.35  # used only in precision mode
 PRECISION_DIVISOR  = 2     # cursor movement scale in precision mode
-PALM_HOLD_FRAMES   = 10    # left-hand frames needed to enter/exit precision mode
+PALM_HOLD_FRAMES   = 24    # deliberate left-palm hold toggles presentation controls
 FIST_HOLD_FRAMES   = 15    # left-hand frames needed to start/stop recording
 
 # Acceleration curve for normal cursor mode (delta-based, like a mouse)
@@ -37,6 +36,8 @@ ACCEL_BASE  = 0.4   # multiplier at near-zero speed (slow = precise)
 ACCEL_GAIN  = 1.0   # how aggressively fast movements are amplified
 ACCEL_NORM  = 0.04  # reference speed (normalised units/frame) for the gain
 MAX_DELTA   = 0.08  # cap per-frame hand delta to absorb re-detection jumps
+CURSOR_DEADZONE = 0.0015  # suppress landmark shimmer while holding still
+CURSOR_FILTER = 0.45      # low-pass filter for hand deltas
 
 # Fraction of the camera frame (each side) that is ignored.
 # 0.2 means only the central 60% of the camera maps to the full screen.
@@ -55,6 +56,7 @@ GESTURE_COLORS = {
     Gesture.PINCH:            (0, 140, 255),
     Gesture.PINCH_DRAG:       (0, 200, 255),
     Gesture.PINCH_RIGHT:      (100, 0, 255),
+    Gesture.POINT:            (0, 80, 255),
     Gesture.OPEN_PALM:        (0, 255, 140),
     Gesture.FIST:             (0, 60, 255),
     Gesture.FIST_THUMB_LEFT:  (255, 200, 0),
@@ -71,6 +73,12 @@ def get_display_rect(index: int) -> tuple[int, int, int, int]:
         tag = " [main]" if Quartz.CGDisplayIsMain(did) else ""
         print(f"  [{i}]  {int(b.size.width)}x{int(b.size.height)}"
               f"  origin=({int(b.origin.x)},{int(b.origin.y)}){tag}")
+    if not display_ids:
+        raise RuntimeError("No active display detected")
+    if index >= len(display_ids):
+        print(f"Display [{index}] is unavailable; using the main display.")
+        index = next((i for i, did in enumerate(display_ids)
+                      if Quartz.CGDisplayIsMain(did)), 0)
     did = display_ids[index]
     b   = Quartz.CGDisplayBounds(did)
     return int(b.origin.x), int(b.origin.y), int(b.size.width), int(b.size.height)
@@ -105,12 +113,18 @@ def draw_hand(frame, lms, active_gesture: Gesture):
         cv2.circle(frame, (x, y), r, c, -1, cv2.LINE_AA)
 
 
-def draw_hud(frame, gesture: Gesture, pinch_dragging: bool, precision: bool):
+def draw_hud(frame, gesture: Gesture, pinch_dragging: bool,
+             controls_enabled: bool, last_action: str):
     h, w = frame.shape[:2]
-    if precision:
-        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 255, 200), 3)
-        cv2.putText(frame, "PRECISION", (20, 90),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 200), 2, cv2.LINE_AA)
+    mode_color = (0, 220, 120) if controls_enabled else (80, 80, 255)
+    mode_text = "PRESENTATION READY" if controls_enabled else "CONTROLS LOCKED"
+    cv2.rectangle(frame, (0, 0), (w - 1, h - 1), mode_color, 3)
+    cv2.putText(frame, mode_text, (20, h - 22),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, mode_color, 2, cv2.LINE_AA)
+    if last_action:
+        (tw, _), _ = cv2.getTextSize(last_action, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
+        cv2.putText(frame, last_action, ((w - tw) // 2, h - 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 220, 255), 2, cv2.LINE_AA)
     label = gesture.value.replace("_", " ").upper()
     if gesture == Gesture.PINCH and pinch_dragging:
         label = "PINCH DRAG"
@@ -221,6 +235,7 @@ def main():
     classifier  = GestureClassifier()
     state_m     = GestureStateMachine()
     pinch_track = PinchTracker()
+    swipe_track = PalmSwipeTracker()
 
     cap          = cv2.VideoCapture(0)
     frame_idx    = 0
@@ -228,15 +243,18 @@ def main():
     cy           = disp_y + scr_h / 2
     last_space_t = 0.0
 
-    precision_mode     = False
+    presentation_enabled = True
     left_palm_count    = 0
-    prec_anchor_cam    = (0.5, 0.5)
-    prec_anchor_screen = (cx, cy)
+    left_palm_held     = False
+    last_action        = ""
+    last_action_until  = 0.0
 
     left_fist_count = 0
     left_fist_held  = False
 
     prev_pos_norm = None
+    filtered_delta = (0.0, 0.0)
+    lost_right_frames = 0
 
     cv2.namedWindow("Hand Tracker", cv2.WINDOW_AUTOSIZE)
 
@@ -250,9 +268,9 @@ def main():
             rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-            ts_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
-            if ts_ms == 0:
-                ts_ms = frame_idx * 33
+            # Camera timestamps can stall or jump backwards. MediaPipe requires
+            # strictly increasing timestamps in VIDEO mode.
+            ts_ms = int(time.monotonic() * 1000)
             result = landmarker.detect_for_video(mp_img, ts_ms)
 
             # ── Separate hands by handedness ──────────────────────────
@@ -264,20 +282,18 @@ def main():
                 else:
                     left_lms = hand_lms
 
-            # ── Left hand: precision mode trigger ─────────────────────
+            # ── Left hand: deliberate safety lock ─────────────────────
             if left_lms and is_open_palm(left_lms):
                 left_palm_count = min(left_palm_count + 1, PALM_HOLD_FRAMES)
             else:
                 left_palm_count = max(left_palm_count - 1, 0)
 
-            should_be_precise = left_palm_count >= PALM_HOLD_FRAMES
-            if should_be_precise != precision_mode:
-                precision_mode = should_be_precise
-                if precision_mode:
-                    prec_anchor_screen = (cx, cy)
-                    actions.zoom_in()
-                else:
-                    actions.zoom_out()
+            palm_held = left_palm_count >= PALM_HOLD_FRAMES
+            if palm_held and not left_palm_held:
+                presentation_enabled = not presentation_enabled
+                last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
+                last_action_until = time.monotonic() + 1.5
+            left_palm_held = palm_held
 
             # ── Left hand: fist → start/stop speech recording ─────────
             if left_lms and is_fist(left_lms):
@@ -299,6 +315,7 @@ def main():
 
             # ── Right hand: gestures + cursor ──────────────────────────
             if right_lms:
+                lost_right_frames = 0
                 lms = right_lms
                 raw_gesture, payload = classifier.classify(lms)
                 entered, active, exited = state_m.update(raw_gesture)
@@ -306,15 +323,15 @@ def main():
                 is_pinching  = (raw_gesture == Gesture.PINCH)
                 pos_norm     = payload.get("pos", (lms[INDEX_TIP].x, lms[INDEX_TIP].y))
                 pinch_events = pinch_track.update(is_pinching, pos_norm)
+                palm_pos = (lms[9].x, lms[9].y)
+                swipe = swipe_track.update(raw_gesture == Gesture.OPEN_PALM, palm_pos)
 
-                for ev in pinch_events:
+                for ev in pinch_events if presentation_enabled else ():
                     if ev[0] == "click":
                         actions.left_click()
-                    elif ev[0] == "drag_delta":
-                        _, dx, dy = ev
-                        actions.scroll(dy)
+                        last_action, last_action_until = "CLICK", time.monotonic() + 1.0
 
-                if entered == Gesture.PINCH_RIGHT:
+                if presentation_enabled and entered == Gesture.PINCH_RIGHT:
                     actions.right_click()
 
                 now = time.time()
@@ -329,45 +346,45 @@ def main():
                     elif entered == Gesture.FIST:
                         with speech_lock:
                             speech_state = "idle"
-                else:
-                    if entered == Gesture.OPEN_PALM:
-                        actions.mission_control()
-                    if entered in (Gesture.FIST_THUMB_LEFT, Gesture.FIST_THUMB_RIGHT) \
+                elif presentation_enabled:
+                    if swipe == "left":
+                        actions.next_slide()
+                        last_action, last_action_until = "NEXT SLIDE", time.monotonic() + 1.2
+                    elif swipe == "right":
+                        actions.previous_slide()
+                        last_action, last_action_until = "PREVIOUS SLIDE", time.monotonic() + 1.2
+                    if entered == Gesture.FIST:
+                        actions.toggle_black_screen()
+                        last_action, last_action_until = "BLACK SCREEN", time.monotonic() + 1.2
+                    elif entered == Gesture.FIST_THUMB_UP:
+                        actions.toggle_media()
+                        last_action, last_action_until = "PLAY / PAUSE", time.monotonic() + 1.2
+                    elif entered in (Gesture.FIST_THUMB_LEFT, Gesture.FIST_THUMB_RIGHT) \
                             and now - last_space_t > 1.0:
                         last_space_t = now
                         if entered == Gesture.FIST_THUMB_LEFT:
-                            actions.switch_space_left()
+                            actions.previous_slide()
+                            last_action = "PREVIOUS SLIDE"
                         else:
-                            actions.switch_space_right()
+                            actions.next_slide()
+                            last_action = "NEXT SLIDE"
+                        last_action_until = time.monotonic() + 1.2
 
-                no_gesture = (
-                    not is_pinching
-                    and raw_gesture == Gesture.NONE
-                    and not pinch_track.is_active
-                )
-                if no_gesture:
-                    if precision_mode:
-                        if prec_anchor_cam == (0.5, 0.5):
-                            prec_anchor_cam = pos_norm
-                        cam_dx = pos_norm[0] - prec_anchor_cam[0]
-                        cam_dy = pos_norm[1] - prec_anchor_cam[1]
-                        tx = prec_anchor_screen[0] + cam_dx * scr_w / PRECISION_DIVISOR
-                        ty = prec_anchor_screen[1] + cam_dy * scr_h / PRECISION_DIVISOR
-                        tx = max(disp_x, min(disp_x + scr_w, tx))
-                        ty = max(disp_y, min(disp_y + scr_h, ty))
-                        cx = cx + SMOOTH * (tx - cx)
-                        cy = cy + SMOOTH * (ty - cy)
-                        actions.move_cursor(int(cx), int(cy))
-                    elif prev_pos_norm is not None:
-                        dx = max(-MAX_DELTA, min(MAX_DELTA, pos_norm[0] - prev_pos_norm[0]))
-                        dy = max(-MAX_DELTA, min(MAX_DELTA, pos_norm[1] - prev_pos_norm[1]))
-                        speed = math.hypot(dx, dy)
-                        scale = ACCEL_BASE + ACCEL_GAIN * (speed / ACCEL_NORM) ** 2
-                        cx = max(disp_x, min(disp_x + scr_w - 1, cx + dx * scr_w * scale))
-                        cy = max(disp_y, min(disp_y + scr_h - 1, cy + dy * scr_h * scale))
-                        actions.move_cursor(int(cx), int(cy))
+                # An isolated index finger behaves as a laser pointer. Normal
+                # conversational hand movement never moves the cursor.
+                if presentation_enabled and raw_gesture == Gesture.POINT:
+                    tx, ty = cam_to_screen(pos_norm[0], pos_norm[1], disp_x, disp_y, scr_w, scr_h)
+                    cx += SMOOTH * (tx - cx)
+                    cy += SMOOTH * (ty - cy)
+                    actions.move_cursor(int(cx), int(cy))
 
                 prev_pos_norm = pos_norm
+            else:
+                lost_right_frames += 1
+                if lost_right_frames >= 3:
+                    prev_pos_norm = None
+                    filtered_delta = (0.0, 0.0)
+                    pinch_track.reset()
 
             # ── Draw overlays and show the window ──────────────────────
             active_gesture = active or (entered if entered else Gesture.NONE) \
@@ -376,14 +393,21 @@ def main():
                 draw_hand(frame, right_lms, active_gesture)
             if left_lms:
                 draw_hand(frame, left_lms, Gesture.NONE)
-            draw_hud(frame, active_gesture, pinch_track.is_dragging, precision_mode)
+            visible_action = last_action if time.monotonic() < last_action_until else ""
+            draw_hud(frame, active_gesture, pinch_track.is_dragging,
+                     presentation_enabled, visible_action)
 
             with speech_lock:
                 cur_speech, cur_text = speech_state, pending_text
             draw_speech_overlay(frame, cur_speech, cur_text, dot_on=(frame_idx // 8) % 2 == 0)
 
             cv2.imshow("Hand Tracker", frame)
-            if cv2.waitKey(1) & 0xFF in (27, ord("q")):   # Esc or q
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("l"):
+                presentation_enabled = not presentation_enabled
+                last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
+                last_action_until = time.monotonic() + 1.5
+            if key in (27, ord("q")):   # Esc or q
                 break
 
             frame_idx += 1

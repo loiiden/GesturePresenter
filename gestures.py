@@ -14,15 +14,16 @@ PINKY_MCP  = 17; PINKY_PIP  = 18; PINKY_TIP  = 20
 
 
 class Gesture(str, Enum):
-    NONE             = "none"              # cursor moves freely
+    NONE             = "none"
+    POINT            = "point"             # index only          → laser pointer
     PINCH            = "pinch"             # thumb+index still   → click on release
-    PINCH_DRAG       = "pinch_drag"        # thumb+index + move  → scroll
+    PINCH_DRAG       = "pinch_drag"
     PINCH_RIGHT      = "pinch_right"       # thumb+middle        → right-click
-    OPEN_PALM        = "open_palm"          # all 5 fingers out   → Mission Control
-    FIST             = "fist"              # normal fist         → (unassigned)
-    FIST_THUMB_LEFT  = "fist_thumb_left"   # fist + thumb left   → Space left
-    FIST_THUMB_RIGHT = "fist_thumb_right"  # fist + thumb right  → Space right
-    FIST_THUMB_UP    = "fist_thumb_up"     # fist + thumb up     → paste text
+    OPEN_PALM        = "open_palm"          # horizontal swipe    → change slide
+    FIST             = "fist"              # held fist           → black screen
+    FIST_THUMB_LEFT  = "fist_thumb_left"   # static fallback     → previous slide
+    FIST_THUMB_RIGHT = "fist_thumb_right"  # static fallback     → next slide
+    FIST_THUMB_UP    = "fist_thumb_up"     # thumb up            → play / pause
 
 
 # ── Geometry helpers ───────────────────────────────────────────────────────────
@@ -36,26 +37,43 @@ def _hand_size(lms) -> float:
 def _pinch_ratio(lms, tip_a: int, tip_b: int) -> float:
     return _dist(lms[tip_a], lms[tip_b]) / _hand_size(lms)
 
-def _is_extended(tip, pip) -> bool:
-    return tip.y < pip.y   # image y↓: tip above pip = finger extended
+def _joint_angle(a, b, c) -> float:
+    """Angle ABC in degrees. Using angles makes gestures work when tilted."""
+    ab = (a.x - b.x, a.y - b.y)
+    cb = (c.x - b.x, c.y - b.y)
+    denom = math.hypot(*ab) * math.hypot(*cb)
+    if denom < 1e-8:
+        return 0.0
+    cosine = max(-1.0, min(1.0, (ab[0] * cb[0] + ab[1] * cb[1]) / denom))
+    return math.degrees(math.acos(cosine))
+
+
+def _is_extended(lms, mcp: int, pip: int, tip: int) -> bool:
+    """A finger is extended when straight and its tip is away from the palm."""
+    # MediaPipe's 2-D projection makes a straight finger look moderately bent
+    # when the palm is angled. These tolerances accept that perspective without
+    # treating a genuinely curled finger as extended.
+    straight = _joint_angle(lms[mcp], lms[pip], lms[tip]) > 140
+    away = _dist(lms[tip], lms[WRIST]) > _dist(lms[pip], lms[WRIST])
+    return straight and away
+
+
+def _extended_fingers(lms) -> list[bool]:
+    return [
+        _is_extended(lms, INDEX_MCP, INDEX_PIP, INDEX_TIP),
+        _is_extended(lms, MIDDLE_MCP, MIDDLE_PIP, MIDDLE_TIP),
+        _is_extended(lms, RING_MCP, RING_PIP, RING_TIP),
+        _is_extended(lms, PINKY_MCP, PINKY_PIP, PINKY_TIP),
+    ]
 
 def is_fist(lms) -> bool:
     """All four fingers curled — used for left-hand speech recording trigger."""
-    return not any([
-        _is_extended(lms[INDEX_TIP],  lms[INDEX_PIP]),
-        _is_extended(lms[MIDDLE_TIP], lms[MIDDLE_PIP]),
-        _is_extended(lms[RING_TIP],   lms[RING_PIP]),
-        _is_extended(lms[PINKY_TIP],  lms[PINKY_PIP]),
-    ])
+    return not any(_extended_fingers(lms))
 
 def is_open_palm(lms) -> bool:
-    """All four fingers extended — used for left-hand precision mode trigger."""
-    return all([
-        _is_extended(lms[INDEX_TIP],  lms[INDEX_PIP]),
-        _is_extended(lms[MIDDLE_TIP], lms[MIDDLE_PIP]),
-        _is_extended(lms[RING_TIP],   lms[RING_PIP]),
-        _is_extended(lms[PINKY_TIP],  lms[PINKY_PIP]),
-    ])
+    """Palm with the main fingers open; allows one imperfect ring/pinky."""
+    ext = _extended_fingers(lms)
+    return ext[0] and ext[1] and sum(ext) >= 3
 
 def _thumb_direction(lms) -> Optional[str]:
     """Returns 'up', 'right', or 'left' if thumb is extended, else None."""
@@ -76,25 +94,32 @@ def _thumb_direction(lms) -> Optional[str]:
 # ── Gesture classifier (pure geometry, one frame) ─────────────────────────────
 
 class GestureClassifier:
-    PINCH_THRESHOLD = 0.15
+    PINCH_CLOSE = 0.17
+    PINCH_OPEN = 0.23
+
+    def __init__(self):
+        self._index_pinched = False
 
     def classify(self, lms) -> tuple[Gesture, dict]:
         tip_pos = (lms[INDEX_TIP].x, lms[INDEX_TIP].y)
 
-        if _pinch_ratio(lms, THUMB_TIP, INDEX_TIP) < self.PINCH_THRESHOLD:
+        index_ratio = _pinch_ratio(lms, THUMB_TIP, INDEX_TIP)
+        threshold = self.PINCH_OPEN if self._index_pinched else self.PINCH_CLOSE
+        self._index_pinched = index_ratio < threshold
+        if self._index_pinched:
             return Gesture.PINCH, {"pos": tip_pos}
 
-        if _pinch_ratio(lms, THUMB_TIP, MIDDLE_TIP) < self.PINCH_THRESHOLD:
+        # Right click is deliberately stricter than left click: the index must
+        # remain clearly away, preventing an ambiguous three-finger cluster.
+        if (_pinch_ratio(lms, THUMB_TIP, MIDDLE_TIP) < self.PINCH_CLOSE
+                and index_ratio > self.PINCH_OPEN):
             return Gesture.PINCH_RIGHT, {}
 
-        ext = [
-            _is_extended(lms[INDEX_TIP],  lms[INDEX_PIP]),
-            _is_extended(lms[MIDDLE_TIP], lms[MIDDLE_PIP]),
-            _is_extended(lms[RING_TIP],   lms[RING_PIP]),
-            _is_extended(lms[PINKY_TIP],  lms[PINKY_PIP]),
-        ]
-        if all(ext):
+        ext = _extended_fingers(lms)
+        if ext[0] and ext[1] and sum(ext) >= 3:
             return Gesture.OPEN_PALM, {}
+        if ext[0] and not any(ext[1:]):
+            return Gesture.POINT, {"pos": tip_pos}
         if not any(ext):
             direction = _thumb_direction(lms)
             if direction == "up":
@@ -110,7 +135,9 @@ class GestureClassifier:
 
 # ── Pinch tracker (click vs drag distinction) ─────────────────────────────────
 
-DRAG_THRESHOLD = 0.03
+DRAG_THRESHOLD = 0.035
+PINCH_ON_FRAMES = 3
+PINCH_OFF_FRAMES = 2
 
 class PinchTracker:
     """
@@ -124,6 +151,8 @@ class PinchTracker:
         self._dragging = False
         self._start    = (0.0, 0.0)
         self._prev     = (0.0, 0.0)
+        self._on_count = 0
+        self._off_count = 0
 
     @property
     def is_dragging(self) -> bool:
@@ -136,13 +165,23 @@ class PinchTracker:
     def update(self, pinching: bool, pos: tuple[float, float]) -> list:
         events = []
 
-        if pinching and not self._active:
+        if pinching:
+            self._on_count += 1
+            self._off_count = 0
+        else:
+            self._off_count += 1
+            self._on_count = 0
+
+        stable_on = pinching and (self._active or self._on_count >= PINCH_ON_FRAMES)
+        stable_off = not pinching and self._active and self._off_count >= PINCH_OFF_FRAMES
+
+        if stable_on and not self._active:
             self._active   = True
             self._dragging = False
             self._start    = pos
             self._prev     = pos
 
-        elif pinching and self._active:
+        elif stable_on and self._active:
             dx_total = pos[0] - self._start[0]
             dy_total = pos[1] - self._start[1]
             if not self._dragging and math.hypot(dx_total, dy_total) > DRAG_THRESHOLD:
@@ -154,7 +193,7 @@ class PinchTracker:
                 events.append(("drag_delta", dx, dy))
                 self._prev = pos
 
-        elif not pinching and self._active:
+        elif stable_off:
             if self._dragging:
                 events.append(("drag_end",))
             else:
@@ -164,10 +203,16 @@ class PinchTracker:
 
         return events
 
+    def reset(self) -> None:
+        """Cancel an in-progress gesture after tracking is lost."""
+        self._active = self._dragging = False
+        self._on_count = self._off_count = 0
+
 
 # ── State machine (debounce for static gestures) ──────────────────────────────
 
 HOLD_FRAMES: dict[Gesture, int] = {
+    Gesture.POINT:            2,
     Gesture.PINCH:            3,
     Gesture.PINCH_RIGHT:      3,
     Gesture.OPEN_PALM:        12,
@@ -176,6 +221,42 @@ HOLD_FRAMES: dict[Gesture, int] = {
     Gesture.FIST_THUMB_RIGHT: 10,
     Gesture.FIST_THUMB_UP:    10,
 }
+
+
+class PalmSwipeTracker:
+    """Recognize one horizontal open-palm swipe per palm presentation."""
+    MIN_HOLD_FRAMES = 4
+    HORIZONTAL_DISTANCE = 0.13
+    MAX_VERTICAL_DISTANCE = 0.10
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        self._frames = 0
+        self._start = None
+        self._triggered = False
+
+    def update(self, open_palm: bool, pos: tuple[float, float]) -> Optional[str]:
+        if not open_palm:
+            self.reset()
+            return None
+        self._frames += 1
+        if self._start is None:
+            self._start = pos
+            return None
+        if self._frames < self.MIN_HOLD_FRAMES or self._triggered:
+            return None
+        dx = pos[0] - self._start[0]
+        dy = pos[1] - self._start[1]
+        if abs(dx) >= self.HORIZONTAL_DISTANCE and abs(dy) <= self.MAX_VERTICAL_DISTANCE:
+            self._triggered = True
+            return "right" if dx > 0 else "left"
+        # Restart if movement was mainly vertical; it was not an intended swipe.
+        if abs(dy) > self.MAX_VERTICAL_DISTANCE:
+            self._start = pos
+            self._frames = 0
+        return None
 
 class GestureStateMachine:
     """
@@ -194,7 +275,7 @@ class GestureStateMachine:
 
         if raw != self._candidate:
             self._candidate       = raw
-            self._candidate_count = 0
+            self._candidate_count = 1
         else:
             self._candidate_count += 1
 

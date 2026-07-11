@@ -2,7 +2,6 @@
 macOS action dispatcher.
 Maps gesture events to system actions.
 """
-import subprocess
 import pyautogui
 import pyperclip
 import Quartz
@@ -54,6 +53,23 @@ def right_click():
     pyautogui.rightClick()
 
 
+def next_slide():
+    pyautogui.press("right")
+
+
+def previous_slide():
+    pyautogui.press("left")
+
+
+def toggle_black_screen():
+    """Standard presentation shortcut in Keynote, PowerPoint and web decks."""
+    pyautogui.press("b")
+
+
+def toggle_media():
+    pyautogui.press("space")
+
+
 def scroll(dy_norm: float):
     """dy_norm: normalised Δy (positive = finger moved down = scroll up)."""
     pixels = int(-dy_norm * SCROLL_SCALE)
@@ -80,21 +96,16 @@ def zoom_out():
 
 
 def mission_control():
+    # Preserve the user's configured Mission Control shortcut.
     _cgkey(_VK_TAB, _VK_OPTION, Quartz.kCGEventFlagMaskAlternate)
 
 
 def switch_space_left():
-    result = subprocess.run(
-        ['osascript', '-e',
-         'tell application "System Events" to key code 123 using option down'],
-        capture_output=True, text=True)
+    _cgkey(_VK_LEFT, _VK_CONTROL, Quartz.kCGEventFlagMaskControl)
 
 
 def switch_space_right():
-    result = subprocess.run(
-        ['osascript', '-e',
-         'tell application "System Events" to key code 124 using option down'],
-        capture_output=True, text=True)
+    _cgkey(_VK_RIGHT, _VK_CONTROL, Quartz.kCGEventFlagMaskControl)
 
 
 def paste_text(text: str):
