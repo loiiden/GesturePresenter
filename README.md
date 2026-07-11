@@ -1,4 +1,3 @@
-# Presentation Hand Controller
 
 A macOS presentation controller built with MediaPipe. It favors large semantic
 actions over mouse-like precision and includes a safety lock for live speaking.
