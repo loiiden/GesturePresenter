@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+from collections import deque
 from enum import Enum
 from typing import Optional
 
@@ -225,37 +226,53 @@ HOLD_FRAMES: dict[Gesture, int] = {
 
 class PalmSwipeTracker:
     """Recognize one horizontal open-palm swipe per palm presentation."""
-    MIN_HOLD_FRAMES = 4
-    HORIZONTAL_DISTANCE = 0.13
-    MAX_VERTICAL_DISTANCE = 0.10
+    MIN_HOLD_FRAMES = 3
+    HORIZONTAL_DISTANCE = 0.09
+    MAX_CLOSED_GAP = 4
+    MAX_GESTURE_FRAMES = 35
+    DIRECTION_DOMINANCE = 1.35
 
     def __init__(self):
         self.reset()
 
     def reset(self) -> None:
         self._frames = 0
+        self._closed_frames = 0
         self._start = None
         self._triggered = False
+        self._positions = deque(maxlen=3)
 
     def update(self, open_palm: bool, pos: tuple[float, float]) -> Optional[str]:
         if not open_palm:
-            self.reset()
+            # A moving hand often loses one or two fingers for a frame. Keep
+            # the gesture alive through that brief tracking flicker.
+            self._closed_frames += 1
+            if self._closed_frames > self.MAX_CLOSED_GAP:
+                self.reset()
             return None
+        self._closed_frames = 0
         self._frames += 1
-        if self._start is None:
-            self._start = pos
+        self._positions.append(pos)
+        smooth_pos = (
+            sum(p[0] for p in self._positions) / len(self._positions),
+            sum(p[1] for p in self._positions) / len(self._positions),
+        )
+        if self._start is None and self._frames >= self.MIN_HOLD_FRAMES:
+            self._start = smooth_pos
             return None
-        if self._frames < self.MIN_HOLD_FRAMES or self._triggered:
+        if self._start is None or self._triggered:
             return None
-        dx = pos[0] - self._start[0]
-        dy = pos[1] - self._start[1]
-        if abs(dx) >= self.HORIZONTAL_DISTANCE and abs(dy) <= self.MAX_VERTICAL_DISTANCE:
+        dx = smooth_pos[0] - self._start[0]
+        dy = smooth_pos[1] - self._start[1]
+        horizontal = abs(dx) >= self.HORIZONTAL_DISTANCE
+        direction_is_clear = abs(dx) >= abs(dy) * self.DIRECTION_DOMINANCE
+        if horizontal and direction_is_clear:
             self._triggered = True
             return "right" if dx > 0 else "left"
-        # Restart if movement was mainly vertical; it was not an intended swipe.
-        if abs(dy) > self.MAX_VERTICAL_DISTANCE:
-            self._start = pos
-            self._frames = 0
+        # Do not let slow drift over many seconds become a swipe.
+        if self._frames >= self.MAX_GESTURE_FRAMES:
+            self._start = smooth_pos
+            self._frames = self.MIN_HOLD_FRAMES
         return None
 
 class GestureStateMachine:

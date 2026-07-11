@@ -324,7 +324,9 @@ def main():
                 pos_norm     = payload.get("pos", (lms[INDEX_TIP].x, lms[INDEX_TIP].y))
                 pinch_events = pinch_track.update(is_pinching, pos_norm)
                 palm_pos = (lms[9].x, lms[9].y)
-                swipe = swipe_track.update(raw_gesture == Gesture.OPEN_PALM, palm_pos)
+                # Use palm geometry directly and let the swipe tracker bridge
+                # brief classification gaps caused by motion blur.
+                swipe = swipe_track.update(is_open_palm(lms), palm_pos)
 
                 for ev in pinch_events if presentation_enabled else ():
                     if ev[0] == "click":
@@ -380,6 +382,7 @@ def main():
 
                 prev_pos_norm = pos_norm
             else:
+                swipe_track.update(False, (0.0, 0.0))
                 lost_right_frames += 1
                 if lost_right_frames >= 3:
                     prev_pos_norm = None
