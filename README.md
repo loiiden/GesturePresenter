@@ -50,8 +50,9 @@ pip install -e ".[voice]"
 ```
 
 Camera and accessibility/input-control permission must be granted when requested
-by the operating system. Linux installations also need Tk and PortAudio system
-packages if those are not supplied by the distribution's Python installation.
+by the operating system. Linux voice installations may also need the PortAudio
+system package. The launcher uses OpenCV and does not require Tk or another GUI
+framework.
 
 ## Building distributable apps
 
