@@ -329,7 +329,10 @@ def main():
                 swipe = swipe_track.update(is_open_palm(lms), palm_pos)
 
                 for ev in pinch_events if presentation_enabled else ():
-                    if ev[0] == "click":
+                    # In presentation mode a pinch has no drag/scroll meaning;
+                    # always turn its release into one click. This makes normal
+                    # landmark movement during a pinch harmless.
+                    if ev[0] in ("click", "drag_end"):
                         actions.left_click()
                         last_action, last_action_until = "CLICK", time.monotonic() + 1.0
 

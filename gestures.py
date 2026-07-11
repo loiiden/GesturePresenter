@@ -67,6 +67,14 @@ def _extended_fingers(lms) -> list[bool]:
         _is_extended(lms, PINKY_MCP, PINKY_PIP, PINKY_TIP),
     ]
 
+
+def _index_available_for_pinch(lms) -> bool:
+    """Reject thumb/index contact caused by making a closed fist."""
+    angle = _joint_angle(lms[INDEX_MCP], lms[INDEX_PIP], lms[INDEX_TIP])
+    tip_from_wrist = _dist(lms[INDEX_TIP], lms[WRIST])
+    pip_from_wrist = _dist(lms[INDEX_PIP], lms[WRIST])
+    return angle > 105 and tip_from_wrist > pip_from_wrist * 0.88
+
 def is_fist(lms) -> bool:
     """All four fingers curled — used for left-hand speech recording trigger."""
     return not any(_extended_fingers(lms))
@@ -95,8 +103,8 @@ def _thumb_direction(lms) -> Optional[str]:
 # ── Gesture classifier (pure geometry, one frame) ─────────────────────────────
 
 class GestureClassifier:
-    PINCH_CLOSE = 0.17
-    PINCH_OPEN = 0.23
+    PINCH_CLOSE = 0.20
+    PINCH_OPEN = 0.27
 
     def __init__(self):
         self._index_pinched = False
@@ -106,7 +114,9 @@ class GestureClassifier:
 
         index_ratio = _pinch_ratio(lms, THUMB_TIP, INDEX_TIP)
         threshold = self.PINCH_OPEN if self._index_pinched else self.PINCH_CLOSE
-        self._index_pinched = index_ratio < threshold
+        self._index_pinched = (
+            index_ratio < threshold and _index_available_for_pinch(lms)
+        )
         if self._index_pinched:
             return Gesture.PINCH, {"pos": tip_pos}
 
@@ -137,7 +147,7 @@ class GestureClassifier:
 # ── Pinch tracker (click vs drag distinction) ─────────────────────────────────
 
 DRAG_THRESHOLD = 0.035
-PINCH_ON_FRAMES = 3
+PINCH_ON_FRAMES = 2
 PINCH_OFF_FRAMES = 2
 
 class PinchTracker:
