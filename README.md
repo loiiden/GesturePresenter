@@ -1,6 +1,7 @@
 # Gesture Presenter
 
-Gesture Presenter is a desktop presentation controller powered by MediaPipe.
+Gesture Presenter is a desktop presentation controller with a web-technology UI
+and a Python/MediaPipe tracking engine.
 Opening the application shows configuration first; the camera starts only after
 you press **Start**. Voice recognition is optional, and gesture-only mode does
 not import or load Whisper.
@@ -50,9 +51,9 @@ pip install -e ".[voice]"
 ```
 
 Camera and accessibility/input-control permission must be granted when requested
-by the operating system. Linux voice installations may also need the PortAudio
-system package. The launcher uses OpenCV and does not require Tk or another GUI
-framework.
+by the operating system. Linux installations need a supported pywebview backend
+(normally WebKitGTK), and voice installations may also need PortAudio. OpenCV is
+used internally for camera frames but creates no application windows.
 
 ## Building distributable apps
 

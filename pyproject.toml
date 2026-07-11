@@ -12,6 +12,7 @@ dependencies = [
   "opencv-python>=4.9",
   "pyautogui>=0.9.54",
   "pyperclip>=1.8",
+  "pywebview>=5.1",
   "screeninfo>=0.8.1",
 ]
 
@@ -30,4 +31,4 @@ gesture-presenter = "app:main"
 py-modules = ["app", "config", "hand_tracker", "gestures", "actions", "speech"]
 
 [tool.setuptools.data-files]
-"gesture_presenter" = ["hand_landmarker.task"]
+"gesture_presenter" = ["hand_landmarker.task", "frontend/index.html", "frontend/styles.css", "frontend/app.js"]

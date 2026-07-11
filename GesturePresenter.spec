@@ -2,8 +2,11 @@
 import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-hiddenimports = collect_submodules("mediapipe")
-datas = [("hand_landmarker.task", ".")] + collect_data_files("mediapipe")
+hiddenimports = collect_submodules("mediapipe") + collect_submodules("webview")
+datas = [
+    ("hand_landmarker.task", "."),
+    ("frontend", "frontend"),
+] + collect_data_files("mediapipe")
 
 a = Analysis(
     ["app.py"],

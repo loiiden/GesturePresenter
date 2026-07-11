@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import base64
+import queue
 import threading
 import urllib.request
 import time
@@ -190,7 +192,7 @@ def draw_speech_overlay(frame, state: str, text: str, dot_on: bool):
                     font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
 
 
-def run(app_config: AppConfig | None = None, stop_event=None):
+def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
     app_config = app_config or AppConfig.load()
     if not os.path.exists(MODEL_PATH):
         download_model()
@@ -243,6 +245,23 @@ def run(app_config: AppConfig | None = None, stop_event=None):
     cap          = cv2.VideoCapture(app_config.camera_index)
     if not cap.isOpened():
         raise RuntimeError(f"Unable to open camera {app_config.camera_index}")
+
+    def emit(event: dict) -> None:
+        if ui_queue is None:
+            return
+        try:
+            ui_queue.put_nowait(event)
+        except queue.Full:
+            try:
+                ui_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                ui_queue.put_nowait(event)
+            except queue.Full:
+                pass
+
+    emit({"type": "status", "message": "Camera active — tracking gestures"})
     frame_idx    = 0
     cx           = disp_x + scr_w / 2
     cy           = disp_y + scr_h / 2
@@ -259,7 +278,8 @@ def run(app_config: AppConfig | None = None, stop_event=None):
 
     lost_right_frames = 0
 
-    cv2.namedWindow("Hand Tracker", cv2.WINDOW_AUTOSIZE)
+    if ui_queue is None:
+        cv2.namedWindow("Hand Tracker", cv2.WINDOW_AUTOSIZE)
 
     with vision.HandLandmarker.create_from_options(options) as landmarker:
         while cap.isOpened():
@@ -417,19 +437,39 @@ def run(app_config: AppConfig | None = None, stop_event=None):
                 cur_speech, cur_text = speech_state, pending_text
             draw_speech_overlay(frame, cur_speech, cur_text, dot_on=(frame_idx // 8) % 2 == 0)
 
-            cv2.imshow("Hand Tracker", frame)
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("l"):
-                presentation_enabled = not presentation_enabled
-                last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
-                last_action_until = time.monotonic() + 1.5
-            if key in (27, ord("q")):   # Esc or q
-                break
+            if ui_queue is not None:
+                # Limit preview traffic while gesture processing continues at
+                # full camera speed. JPEG is efficient to display in a WebView.
+                if frame_idx % 3 == 0:
+                    preview = frame
+                    if preview.shape[1] > 800:
+                        scale = 800 / preview.shape[1]
+                        preview = cv2.resize(preview, None, fx=scale, fy=scale)
+                    ok_jpeg, encoded = cv2.imencode(
+                        ".jpg", preview, [cv2.IMWRITE_JPEG_QUALITY, 72]
+                    )
+                    if ok_jpeg:
+                        emit({
+                            "type": "frame",
+                            "data": base64.b64encode(encoded).decode("ascii"),
+                            "message": "Tracking active",
+                        })
+            else:
+                cv2.imshow("Hand Tracker", frame)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("l"):
+                    presentation_enabled = not presentation_enabled
+                    last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
+                    last_action_until = time.monotonic() + 1.5
+                if key in (27, ord("q")):   # Esc or q
+                    break
 
             frame_idx += 1
 
     cap.release()
-    cv2.destroyAllWindows()
+    if ui_queue is None:
+        cv2.destroyAllWindows()
+    emit({"type": "status", "message": "Stopped"})
 
 
 def main():
