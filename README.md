@@ -60,18 +60,26 @@ which downloads a compatible Python for you and manages the environment. You do
    ```
    Restart your shell afterwards so `uv` is on the `PATH`.
 
-2. **Install and run** the app straight from GitHub:
+2. **Install and run** the app straight from GitHub.
+
+   **macOS / Windows** use the built-in system WebView, so nothing extra is
+   needed:
 
    ```bash
    uv tool install git+https://github.com/loiiden/GesturePresenter.git
    gesture-presenter
    ```
 
-   With local speech-to-text:
+   **Linux** also needs a GUI backend — add the `gui-qt` extra (see step 3 for
+   why):
 
    ```bash
-   uv tool install "gesture-presenter[voice] @ git+https://github.com/loiiden/GesturePresenter.git"
+   uv tool install "gesture-presenter[gui-qt] @ git+https://github.com/loiiden/GesturePresenter.git"
+   gesture-presenter
    ```
+
+   Combine extras as needed, e.g. `[gui-qt,voice]` on Linux or `[voice]`
+   elsewhere for local speech-to-text.
 
    Prefer working from a checkout? Clone it and let uv build the environment on
    the fly — no manual venv, no activation:
@@ -79,20 +87,27 @@ which downloads a compatible Python for you and manages the environment. You do
    ```bash
    git clone https://github.com/loiiden/GesturePresenter.git
    cd GesturePresenter
-   uv run gesture-presenter          # add --extra voice for speech-to-text
+   uv run gesture-presenter                    # macOS / Windows
+   uv run --extra gui-qt gesture-presenter     # Linux (add ,voice for speech)
    ```
 
-3. **Linux only — system libraries.** These aren't Python packages, so uv can't
-   fetch them; install them with your package manager:
+3. **Linux only — system libraries.** A few things aren't Python packages, so
+   install them with your package manager:
 
    ```bash
-   # pywebview's WebKitGTK backend (Debian/Ubuntu):
-   sudo apt install gir1.2-webkit-6.0     # older releases: gir1.2-webkit2-4.1
-   # only if you enabled voice:
-   sudo apt install portaudio19-dev
+   sudo apt install libxcb-cursor0      # Qt platform plugin (Ubuntu 24.04+)
+   sudo apt install portaudio19-dev     # only if you enabled voice
    ```
-   On Ubuntu 26 / newer distros the WebKit package was renamed; if the command
-   above fails, find the right name with `apt search webkit | grep gir`.
+
+   *Why `gui-qt`?* pywebview's usual Linux backend, GTK, relies on the system
+   PyGObject (`gi`) and WebKitGTK, which a venv or uv-managed Python **cannot**
+   import (`ModuleNotFoundError: No module named 'gi'`). The `gui-qt` extra
+   installs a self-contained Qt/WebEngine backend that works inside any
+   environment. If you'd rather use the lighter system WebKitGTK, create the venv
+   from your **system** Python with `--system-site-packages` and
+   `sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1`
+   — but the venv's Python version must match the system's, so Qt is the simpler,
+   more reliable path.
 
 ### Manual setup with pip (without uv)
 
@@ -105,12 +120,22 @@ git clone https://github.com/loiiden/GesturePresenter.git
 cd GesturePresenter
 ```
 
-**macOS / Linux:**
+**macOS:**
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e .            # or:  pip install -e ".[voice]"
+gesture-presenter
+```
+
+**Linux** (add the `gui-qt` extra for the GUI backend — see the uv section for why):
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[gui-qt]"  # or:  pip install -e ".[gui-qt,voice]"
+sudo apt install libxcb-cursor0    # Qt platform plugin (Ubuntu 24.04+)
 gesture-presenter
 ```
 
@@ -124,8 +149,7 @@ gesture-presenter
 ```
 
 Reactivate the environment (`source .venv/bin/activate`, or
-`.\.venv\Scripts\Activate.ps1`) each time before running it. Linux still needs
-the WebKitGTK/PortAudio system packages listed above.
+`.\.venv\Scripts\Activate.ps1`) each time before running it.
 
 ### First launch and permissions
 

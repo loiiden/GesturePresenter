@@ -24,6 +24,11 @@ voice = [
   "numpy>=1.26",
   "sounddevice>=0.4.7",
 ]
+# Linux GUI backend for pywebview. macOS and Windows use the OS's built-in
+# WebView, but on Linux pywebview needs GTK (system PyGObject + WebKitGTK, which
+# a plain venv or uv-managed Python can't import) or Qt. Qt is fully pip-installable
+# inside the environment, so it's the reliable choice for running from source.
+gui-qt = ["qtpy>=2.4", "PyQt6>=6.6", "PyQt6-WebEngine>=6.6"]
 build = ["pyinstaller>=6.8"]
 
 [project.gui-scripts]
