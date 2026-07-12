@@ -28,6 +28,8 @@ class AppApi:
     def __init__(self):
         self.config = AppConfig.load()
         self.worker = None
+        self.phase = "idle"
+        self.lifecycle_lock = threading.RLock()
         self.stop_event = None
         self.ui_queue = None
         self.frame = None
@@ -48,6 +50,7 @@ class AppApi:
             "config": asdict(self.config),
             "voiceAvailable": self.voice_available,
             "running": self._running(),
+            "phase": self.phase,
             "message": self.message,
             "engineReady": self.engine_ready.is_set(),
             "engineError": self.engine_error,
@@ -74,8 +77,12 @@ class AppApi:
         return asdict(self.config)
 
     def start_tracking(self, values: dict) -> dict:
-        if self._running():
-            return {"ok": True}
+        with self.lifecycle_lock:
+            if self.phase in ("starting", "running"):
+                return {"ok": True, "phase": self.phase}
+            if self.phase == "stopping":
+                return {"ok": False, "phase": self.phase,
+                        "error": "Tracking is still stopping. Please wait."}
         if self.engine_error:
             return {"ok": False, "error": self.engine_error}
         if not self.engine_ready.is_set():
@@ -104,15 +111,20 @@ class AppApi:
             args=(self.config, self.stop_event, self.ui_queue),
             daemon=True,
         )
+        self.phase = "starting"
         self.worker.start()
         self.message = "Starting camera…"
-        return {"ok": True}
+        return {"ok": True, "phase": self.phase}
 
     def stop_tracking(self) -> dict:
-        if self.stop_event:
-            self.stop_event.set()
-            self.message = "Stopping…"
-        return {"ok": True}
+        with self.lifecycle_lock:
+            if self.phase == "idle":
+                return {"ok": True, "phase": self.phase}
+            if self.stop_event:
+                self.stop_event.set()
+            self.phase = "stopping"
+            self.message = "Stopping camera…"
+            return {"ok": True, "phase": self.phase}
 
     def poll(self) -> dict:
         self._drain_events()
@@ -120,11 +132,13 @@ class AppApi:
             self.worker.join()
             self.worker = None
             self.stop_event = None
+            self.phase = "idle"
             if not self.error:
                 self.message = "Stopped"
         frame, self.frame = self.frame, None
         return {
             "running": self._running(),
+            "phase": self.phase,
             "message": self.message,
             "error": self.error,
             "frame": frame,
@@ -142,8 +156,12 @@ class AppApi:
                 if kind == "frame":
                     self.frame = "data:image/jpeg;base64," + event["data"]
                     self.message = event.get("message", "Tracking active")
+                    if self.phase != "stopping":
+                        self.phase = "running"
                 elif kind == "status":
                     self.message = event["message"]
+                    if event["message"].startswith("Camera active") and self.phase != "stopping":
+                        self.phase = "running"
                 elif kind == "error":
                     self.error = event["message"]
         except queue.Empty:

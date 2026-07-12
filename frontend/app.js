@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
-let running = false;
 let initialized = false;
+let phase = 'idle';
+let pollInFlight = false;
 
 function values() {
   return {
@@ -49,16 +50,24 @@ function showError(message) {
   $('statusText').textContent = 'Unable to continue';
 }
 
-function setRunning(value) {
-  running = value;
-  $('startButton').textContent = value ? 'Stop tracking' : 'Start presentation';
-  $('startButton').classList.toggle('stop', value);
-  $('statusBadge').classList.toggle('running', value);
-  $('statusBadge').querySelector('span').textContent = value ? 'Live' : 'Ready';
+function setPhase(value) {
+  phase = value || 'idle';
+  $('statusBadge').classList.toggle('running', phase === 'running');
+  const labels = {
+    idle: 'Start presentation',
+    starting: 'Cancel startup',
+    running: 'Stop tracking',
+    stopping: 'Stopping…',
+  };
+  $('startButton').textContent = labels[phase] || labels.idle;
+  $('startButton').classList.toggle('stop', phase === 'running' || phase === 'starting');
+  $('startButton').disabled = phase === 'stopping';
+  $('statusBadge').querySelector('span').textContent =
+    phase === 'running' ? 'Live' : phase === 'starting' ? 'Starting' : phase === 'stopping' ? 'Stopping' : 'Ready';
 }
 
 function setEngineReady(ready) {
-  if (running) return;
+  if (phase !== 'idle') return;
   $('startButton').disabled = !ready;
   $('startButton').textContent = ready ? 'Start presentation' : 'Preparing engine…';
   if (!ready) $('statusText').textContent = 'Preparing gesture recognition…';
@@ -72,18 +81,21 @@ async function handleStart() {
   $('error').hidden = true;
   $('startButton').disabled = true;
   try {
-    if (running) {
-      await window.pywebview.api.stop_tracking();
+    if (phase !== 'idle') {
+      const result = await window.pywebview.api.stop_tracking();
+      setPhase(result.phase);
     } else {
       $('statusText').textContent = 'Requesting camera access…';
       const result = await window.pywebview.api.start_tracking(values());
       if (!result.ok) showError(result.error || 'Unable to start tracking.');
-      else setRunning(true);
+      else setPhase(result.phase);
     }
   } catch (error) {
     showError(`Unable to start: ${error.message || error}`);
   } finally {
-    $('startButton').disabled = false;
+    // Stopping remains locked until the backend confirms the camera thread has
+    // exited. Starting stays clickable so it can be cancelled deliberately.
+    $('startButton').disabled = phase === 'stopping';
   }
 }
 
@@ -127,7 +139,7 @@ async function init() {
       displays: [{id: state.config.display_index, label: `Display ${state.config.display_index + 1}`}],
     }, state.config);
     apply(state.config);
-    setRunning(state.running);
+    setPhase(state.phase);
     setEngineReady(state.engineReady);
     if (state.engineError) showError(state.engineError);
     if (!state.voiceAvailable) {
@@ -136,7 +148,7 @@ async function init() {
       $('voiceHint').textContent = 'Voice components are not installed';
     }
     initialized = true;
-    setRunning(state.running);
+    setPhase(state.phase);
     setEngineReady(state.engineReady);
     $('statusText').textContent = state.message || 'Camera is off';
     // Device metadata can take several seconds on macOS. Refresh it in the
@@ -151,9 +163,11 @@ async function init() {
 }
 
 async function poll() {
+  if (pollInFlight) return;
+  pollInFlight = true;
   try {
     const state = await window.pywebview.api.poll();
-    setRunning(state.running);
+    setPhase(state.phase);
     setEngineReady(state.engineReady);
     if (state.engineError) showError(state.engineError);
     $('statusText').textContent = state.message;
@@ -168,6 +182,8 @@ async function poll() {
     }
   } catch (error) {
     showError(`Connection to the tracking service was lost: ${error.message || error}`);
+  } finally {
+    pollInFlight = false;
   }
 }
 
