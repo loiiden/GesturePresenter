@@ -4,9 +4,20 @@ Thread-safe: start_recording() / stop_recording() called from camera loop,
 result delivered via on_result callback from a background thread.
 """
 import threading
+import sys
+import types
 import warnings
 import numpy as np
 import sounddevice as sd
+
+# faster-whisper imports PyAV for decoding audio files. Gesture Presenter sends
+# an in-memory NumPy waveform directly, so that decoder is never used. Loading
+# PyAV anyway introduces a second FFmpeg/libavdevice beside OpenCV's copy and can
+# crash a frozen macOS app. A minimal module placeholder satisfies the unused
+# import without loading conflicting native libraries.
+if "av" not in sys.modules:
+    sys.modules["av"] = types.ModuleType("av")
+
 from faster_whisper import WhisperModel
 
 SAMPLE_RATE  = 16000   # Whisper expects 16 kHz
@@ -29,9 +40,15 @@ class SpeechRecognizer:
         threading.Thread(target=self._load_model, daemon=True).start()
 
     def _load_model(self):
-        print(f"[speech] loading Whisper '{MODEL_SIZE}' model…")
-        self._model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-        print("[speech] model ready")
+        try:
+            print(f"[speech] loading Whisper '{MODEL_SIZE}' model…")
+            self._model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+            print("[speech] model ready")
+        except Exception as exc:
+            # Voice is optional: a model/cache/network failure must never stop
+            # gesture tracking or camera startup.
+            self._model = None
+            print(f"[speech] model unavailable: {exc}")
 
     def start_recording(self):
         with self._lock:

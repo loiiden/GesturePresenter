@@ -23,7 +23,10 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=[],
+    # PyAV is only used by faster-whisper for file decoding. Microphone input is
+    # already a NumPy waveform, and excluding it avoids duplicate FFmpeg dylibs
+    # colliding with OpenCV in the macOS bundle.
+    excludes=["av"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
