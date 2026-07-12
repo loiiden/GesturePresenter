@@ -124,6 +124,11 @@ docker run --rm -p 8080:8080 -e SITE_DOMAIN=":8080" \
   `docker save | ssh docker load`, which works fine for a private repo. If you'd
   rather use GHCR (for rollback/history), that's a small change to
   `deploy-site.yml`.
+- **Architecture must match the server.** The GitHub runner is amd64, so
+  `deploy-site.yml` cross-builds the image for the VPS with Buildx + QEMU
+  (`--platform linux/arm64`). An amd64 image on an ARM host fails at startup with
+  `exec format error`. For a 32-bit ARM host use `linux/arm/v7`; for an x86 host
+  set `linux/amd64` (or drop the `--platform` flag).
 - **Rollback:** installers keep a versioned copy under `/srv/downloads/<version>/`.
   Prune old ones whenever you like.
 - The site's GitHub links (nav/footer) point at the private repo and won't

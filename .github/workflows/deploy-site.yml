@@ -19,8 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build site image
-        run: docker build -t gp-site:latest landing
+      # The runner is amd64 but the VPS is ARM, so cross-build with QEMU.
+      # aarch64 server -> linux/arm64 ; 32-bit armv7l server -> linux/arm/v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build site image for ARM
+        run: |
+          docker buildx build --platform linux/arm64 \
+            -t gp-site:latest --load landing
 
       - name: Export image
         run: docker save gp-site:latest | gzip > gp-site.tar.gz
