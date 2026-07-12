@@ -46,7 +46,6 @@ class AppApi:
             "voiceAvailable": self.voice_available,
             "running": self._running(),
             "message": self.message,
-            "devices": self.refresh_devices(),
         }
 
     def refresh_devices(self) -> dict:

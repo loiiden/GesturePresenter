@@ -258,4 +258,5 @@ footer p { color: var(--tertiary); font-size: 10px; }
 }
 .primary:hover { background: var(--blue-hover); }
 .primary:active { transform: scale(.985); }
+.primary:disabled { opacity: .55; cursor: wait; }
 .primary.stop { background: var(--red); }
