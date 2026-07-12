@@ -11,6 +11,7 @@ import webview
 
 from config import APP_NAME, AppConfig
 from devices import list_cameras, list_displays
+from permissions import request_camera_permission
 
 
 def _tracking_worker(config: AppConfig, stop_event, ui_queue) -> None:
@@ -64,7 +65,16 @@ class AppApi:
     def start_tracking(self, values: dict) -> dict:
         if self._running():
             return {"ok": True}
-        self.save_config(values)
+        try:
+            self.save_config(values)
+        except Exception as exc:
+            self.error = f"Could not save settings: {exc}"
+            return {"ok": False, "error": self.error}
+        allowed, permission_error = request_camera_permission()
+        if not allowed:
+            self.error = permission_error
+            self.message = "Camera permission required"
+            return {"ok": False, "error": permission_error}
         self.stop_event = threading.Event()
         self.ui_queue = queue.Queue(maxsize=3)
         self.frame = None

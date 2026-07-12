@@ -13,7 +13,20 @@ async function init() {
   if(!state.voiceAvailable){ $('voiceRow').classList.add('disabled'); $('voice').checked=false; $('voiceHint').textContent='Voice components are not installed'; }
   document.querySelectorAll('select,input').forEach(el=>el.addEventListener('change',()=>window.pywebview.api.save_config(values())));
   $('refreshDevices').onclick=async()=>{ const devices=await window.pywebview.api.refresh_devices(); const current=values(); applyDevices(devices,current); };
-  $('startButton').onclick=async()=>{ if(running) await window.pywebview.api.stop_tracking(); else await window.pywebview.api.start_tracking(values()); };
+  $('startButton').onclick=async()=>{
+    $('error').hidden=true;
+    try {
+      if(running) await window.pywebview.api.stop_tracking();
+      else {
+        $('statusText').textContent='Requesting camera access…';
+        const result=await window.pywebview.api.start_tracking(values());
+        if(!result.ok){ $('error').textContent=result.error||'Unable to start tracking.'; $('error').hidden=false; }
+      }
+    } catch(error) {
+      $('error').textContent=`Unable to start: ${error.message||error}`;
+      $('error').hidden=false;
+    }
+  };
   setInterval(poll,120);
 }
 async function poll(){ const s=await window.pywebview.api.poll(); setRunning(s.running); $('statusText').textContent=s.message; $('error').hidden=!s.error; $('error').textContent=s.error||''; if(s.frame){ $('preview').src=s.frame; $('preview').style.display='block'; $('emptyState').style.display='none'; } else if(!s.running){ $('preview').style.display='none'; $('emptyState').style.display='flex'; } }

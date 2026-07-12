@@ -14,6 +14,7 @@ dependencies = [
   "pyperclip>=1.8",
   "pywebview>=5.1",
   "screeninfo>=0.8.1",
+  "pyobjc-framework-AVFoundation>=9.0; platform_system == 'Darwin'",
 ]
 
 [project.optional-dependencies]
@@ -28,7 +29,7 @@ build = ["pyinstaller>=6.8"]
 gesture-presenter = "app:main"
 
 [tool.setuptools]
-py-modules = ["app", "config", "devices", "hand_tracker", "gestures", "actions", "speech"]
+py-modules = ["app", "config", "devices", "permissions", "hand_tracker", "gestures", "actions", "speech"]
 
 [tool.setuptools.data-files]
 "gesture_presenter" = ["hand_landmarker.task", "frontend/index.html", "frontend/styles.css", "frontend/app.js"]

@@ -3,6 +3,8 @@ import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 hiddenimports = collect_submodules("mediapipe") + collect_submodules("webview")
+if sys.platform == "darwin":
+    hiddenimports += ["AVFoundation"]
 icon = (
     "assets/icon.icns" if sys.platform == "darwin"
     else "assets/icon.ico" if sys.platform == "win32"
