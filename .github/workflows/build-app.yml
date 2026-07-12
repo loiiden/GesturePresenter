@@ -61,7 +61,7 @@ jobs:
           name: GesturePresenter-${{ runner.os }}
           path: |
             dist/Gesture-Presenter-macOS.dmg
-            dist/installer/Gesture-Presenter-Windows-Setup.exe
+            dist/Gesture-Presenter-Windows-Setup.exe
             dist/Gesture-Presenter-Linux-x86_64.AppImage
           if-no-files-found: error
 
@@ -71,7 +71,7 @@ jobs:
         with:
           files: |
             dist/Gesture-Presenter-macOS.dmg
-            dist/installer/Gesture-Presenter-Windows-Setup.exe
+            dist/Gesture-Presenter-Windows-Setup.exe
             dist/Gesture-Presenter-Linux-x86_64.AppImage
 
   # Ship the freshly built installers to the download server (VPS) and refresh
@@ -93,6 +93,9 @@ jobs:
           set -euo pipefail
           VER="${GITHUB_REF_NAME#v}"
           cd staging
+          # Flatten any accidental subdirectories so every installer sits at the
+          # top level and is served from /latest/<file> with no path prefix.
+          find . -mindepth 2 -type f -exec mv -t . {} +
           mac="Gesture-Presenter-macOS.dmg"
           win="Gesture-Presenter-Windows-Setup.exe"
           lin="Gesture-Presenter-Linux-x86_64.AppImage"

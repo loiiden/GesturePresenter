@@ -34,27 +34,78 @@ Windows, or Linux and restored the next time the app starts.
 
 Press `L` to lock or unlock controls from the keyboard.
 
-## Running from source
+## Run from source (step by step)
 
-Python 3.10–3.12 is supported.
+These steps take you from a clean machine to a running app. **macOS is shown
+first**; Windows and Linux differences follow each step. Python 3.10–3.12 is
+supported, and running from source works on all three platforms.
+
+### 1. Install prerequisites
+
+You need **Git** and **Python 3.10–3.12**.
+
+- **macOS:** `brew install git python@3.11`
+  (or install Python from [python.org](https://www.python.org/downloads/)).
+- **Windows:** install Python 3.11 from
+  [python.org](https://www.python.org/downloads/) and tick
+  *"Add python.exe to PATH"* during setup. Git from
+  [git-scm.com](https://git-scm.com/download/win).
+- **Linux (Debian/Ubuntu):**
+  ```bash
+  sudo apt update
+  sudo apt install git python3.11 python3.11-venv python3-pip
+  # pywebview needs a WebKitGTK backend:
+  sudo apt install gir1.2-webkit2-4.1
+  # only if you want voice recognition:
+  sudo apt install portaudio19-dev
+  ```
+  Package names vary by distribution.
+
+### 2. Clone the repository
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .
-gesture-presenter
+git clone https://github.com/loiiden/GesturePresenter.git
+cd GesturePresenter
 ```
 
-To include local voice recognition:
+### 3. Create a virtual environment and install the app
+
+**macOS / Linux:**
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+**Windows (PowerShell):**
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+To include local speech-to-text, install the voice extra instead of the last
+line above:
 
 ```bash
 pip install -e ".[voice]"
 ```
 
-Camera and accessibility/input-control permission must be granted when requested
-by the operating system. Linux installations need a supported pywebview backend
-(normally WebKitGTK), and voice installations may also need PortAudio. OpenCV is
-used internally for camera frames but creates no application windows.
+### 4. Run it
+
+```bash
+gesture-presenter
+```
+
+On first launch, grant **camera** and **accessibility / input-control**
+permission when the OS prompts for them. On macOS these live in **System
+Settings → Privacy & Security → Camera** and **→ Accessibility**. OpenCV handles
+camera frames internally and opens no extra windows.
+
+Next time, reactivate the environment (`source .venv/bin/activate`, or
+`.\.venv\Scripts\Activate.ps1` on Windows) before running `gesture-presenter`.
 
 ## Building and releasing installers
 
@@ -105,7 +156,9 @@ release. Tagged workflows do both.
 ### Build locally on macOS
 
 Use Python 3.10–3.12. Build dependencies are developer-only; end users do not
-need Python.
+need Python. Work from a clone of the repository — install the prerequisites and
+clone it as in steps 1–2 of *Run from source* above, then from the project
+directory:
 
 ```bash
 python3.11 -m venv .build-venv
@@ -141,7 +194,7 @@ pyinstaller --clean --noconfirm GesturePresenter.spec
 iscc packaging\windows\GesturePresenter.iss
 ```
 
-The result is `dist\installer\Gesture-Presenter-Windows-Setup.exe`.
+The result is `dist\Gesture-Presenter-Windows-Setup.exe`.
 
 ### Build locally on Linux
 
