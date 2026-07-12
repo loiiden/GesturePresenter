@@ -11,7 +11,7 @@ import webview
 
 from config import APP_NAME, AppConfig
 from devices import list_cameras, list_displays
-from permissions import request_camera_permission
+from permissions import request_accessibility_permission, request_camera_permission
 
 
 def _tracking_worker(config: AppConfig, stop_event, ui_queue) -> None:
@@ -33,6 +33,9 @@ class AppApi:
         self.frame = None
         self.message = "Ready — camera is off"
         self.error = None
+        self.engine_ready = threading.Event()
+        self.engine_error = None
+        threading.Thread(target=self._preload_engine, daemon=True).start()
         self.voice_available = all(
             importlib.util.find_spec(name) is not None
             for name in ("faster_whisper", "sounddevice")
@@ -46,7 +49,16 @@ class AppApi:
             "voiceAvailable": self.voice_available,
             "running": self._running(),
             "message": self.message,
+            "engineReady": self.engine_ready.is_set(),
+            "engineError": self.engine_error,
         }
+
+    def _preload_engine(self) -> None:
+        try:
+            import hand_tracker  # noqa: F401 — warm expensive native imports
+            self.engine_ready.set()
+        except Exception as exc:
+            self.engine_error = f"Tracking engine could not load: {exc}"
 
     def refresh_devices(self) -> dict:
         return {"cameras": list_cameras(), "displays": list_displays()}
@@ -64,6 +76,10 @@ class AppApi:
     def start_tracking(self, values: dict) -> dict:
         if self._running():
             return {"ok": True}
+        if self.engine_error:
+            return {"ok": False, "error": self.engine_error}
+        if not self.engine_ready.is_set():
+            return {"ok": False, "error": "The tracking engine is still preparing. Please try again shortly."}
         try:
             self.save_config(values)
         except Exception as exc:
@@ -73,6 +89,11 @@ class AppApi:
         if not allowed:
             self.error = permission_error
             self.message = "Camera permission required"
+            return {"ok": False, "error": permission_error}
+        allowed, permission_error = request_accessibility_permission()
+        if not allowed:
+            self.error = permission_error
+            self.message = "Accessibility permission required"
             return {"ok": False, "error": permission_error}
         self.stop_event = threading.Event()
         self.ui_queue = queue.Queue(maxsize=3)
@@ -107,6 +128,8 @@ class AppApi:
             "message": self.message,
             "error": self.error,
             "frame": frame,
+            "engineReady": self.engine_ready.is_set(),
+            "engineError": self.engine_error,
         }
 
     def _drain_events(self) -> None:

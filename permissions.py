@@ -47,3 +47,26 @@ def request_camera_permission() -> tuple[bool, str | None]:
             "System Settings → Privacy & Security → Camera."
         )
     return True, None
+
+
+def request_accessibility_permission() -> tuple[bool, str | None]:
+    """Check the current executable's input-control permission on macOS."""
+    if platform.system() != "Darwin":
+        return True, None
+    try:
+        import ApplicationServices
+    except ImportError:
+        return False, "The macOS Accessibility permission component is unavailable."
+
+    if ApplicationServices.AXIsProcessTrusted():
+        return True, None
+
+    ApplicationServices.AXIsProcessTrustedWithOptions({
+        ApplicationServices.kAXTrustedCheckOptionPrompt: True,
+    })
+    return False, (
+        "Gesture Presenter is not trusted to control the keyboard and pointer. "
+        "Remove any older Gesture Presenter entry in System Settings → Privacy & "
+        "Security → Accessibility, add the current app from Applications, enable "
+        "it, then click Start again."
+    )

@@ -57,6 +57,13 @@ function setRunning(value) {
   $('statusBadge').querySelector('span').textContent = value ? 'Live' : 'Ready';
 }
 
+function setEngineReady(ready) {
+  if (running) return;
+  $('startButton').disabled = !ready;
+  $('startButton').textContent = ready ? 'Start presentation' : 'Preparing engine…';
+  if (!ready) $('statusText').textContent = 'Preparing gesture recognition…';
+}
+
 async function handleStart() {
   if (!initialized) {
     showError('The application is still loading. Please wait a moment.');
@@ -121,14 +128,16 @@ async function init() {
     }, state.config);
     apply(state.config);
     setRunning(state.running);
+    setEngineReady(state.engineReady);
+    if (state.engineError) showError(state.engineError);
     if (!state.voiceAvailable) {
       $('voiceRow').classList.add('disabled');
       $('voice').checked = false;
       $('voiceHint').textContent = 'Voice components are not installed';
     }
     initialized = true;
-    $('startButton').disabled = false;
     setRunning(state.running);
+    setEngineReady(state.engineReady);
     $('statusText').textContent = state.message || 'Camera is off';
     // Device metadata can take several seconds on macOS. Refresh it in the
     // background after Start is already safe to use.
@@ -145,6 +154,8 @@ async function poll() {
   try {
     const state = await window.pywebview.api.poll();
     setRunning(state.running);
+    setEngineReady(state.engineReady);
+    if (state.engineError) showError(state.engineError);
     $('statusText').textContent = state.message;
     if (state.error) showError(state.error);
     if (state.frame) {
