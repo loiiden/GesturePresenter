@@ -1,0 +1,51 @@
+name: Deploy landing site
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "landing/**"
+      - ".github/workflows/deploy-site.yml"
+
+# Serialise deploys so two pushes can't race on the VPS.
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build site image
+        run: docker build -t gp-site:latest landing
+
+      - name: Export image
+        run: docker save gp-site:latest | gzip > gp-site.tar.gz
+
+      - name: Add SSH deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Ship to VPS and restart
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}   # e.g. loiiden.de or its IP
+          USER: ${{ secrets.DEPLOY_USER }}   # e.g. deploy
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh "$USER@$HOST" "mkdir -p ~/gp-site"
+          scp landing/deploy/docker-compose.yml "$USER@$HOST:~/gp-site/docker-compose.yml"
+          scp gp-site.tar.gz                    "$USER@$HOST:~/gp-site/gp-site.tar.gz"
+          ssh "$USER@$HOST" '
+            set -e
+            cd ~/gp-site
+            gunzip -c gp-site.tar.gz | docker load
+            docker compose up -d
+            rm -f gp-site.tar.gz
+            docker image prune -f
+          '
