@@ -68,3 +68,21 @@ Output is written to `dist/`. Tagged releases and manual workflow runs build
 artifacts for macOS, Windows, and Linux through GitHub Actions. Code signing and
 platform-specific installers are the next release-engineering phase; unsigned
 builds may show an operating-system security warning.
+
+The release workflow produces end-user packages automatically:
+
+- `Gesture-Presenter-macOS.dmg`
+- `Gesture-Presenter-Windows-Setup.exe`
+- `Gesture-Presenter-Linux-x86_64.AppImage`
+
+To publish them, push a version tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow builds each package on its native operating system and attaches it
+to the tagged release. The source icon is `assets/icon.png`; generated `.icns`,
+`.ico`, and Linux 512 px assets are committed for reproducible builds. Public
+releases should be signed and the macOS build notarized before broad distribution.

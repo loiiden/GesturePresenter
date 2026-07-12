@@ -5,6 +5,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -19,8 +22,54 @@ jobs:
       - name: Install application and builder
         run: python -m pip install ".[voice,build]"
       - name: Build native application
-        run: pyinstaller --noconfirm GesturePresenter.spec
-      - uses: actions/upload-artifact@v4
+        run: pyinstaller --clean --noconfirm GesturePresenter.spec
+
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dist/dmg
+          cp -R "dist/Gesture Presenter.app" dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "Gesture Presenter" -srcfolder dist/dmg -ov -format UDZO "dist/Gesture-Presenter-macOS.dmg"
+
+      - name: Create Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: iscc packaging/windows/GesturePresenter.iss
+
+      - name: Create Linux AppImage layout
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/512x512/apps
+          cp dist/GesturePresenter AppDir/usr/bin/
+          cp packaging/linux/AppRun AppDir/AppRun
+          chmod +x AppDir/AppRun AppDir/usr/bin/GesturePresenter
+          cp packaging/linux/GesturePresenter.desktop AppDir/GesturePresenter.desktop
+          cp packaging/linux/GesturePresenter.desktop AppDir/usr/share/applications/
+          cp assets/icon-512.png AppDir/gesture-presenter.png
+          cp assets/icon-512.png AppDir/usr/share/icons/hicolor/512x512/apps/gesture-presenter.png
+          curl -L -o appimagetool.AppImage https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool.AppImage
+          ./appimagetool.AppImage --appimage-extract
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir "dist/Gesture-Presenter-Linux-x86_64.AppImage"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
           name: GesturePresenter-${{ runner.os }}
-          path: dist/
+          path: |
+            dist/Gesture-Presenter-macOS.dmg
+            dist/installer/Gesture-Presenter-Windows-Setup.exe
+            dist/Gesture-Presenter-Linux-x86_64.AppImage
+          if-no-files-found: error
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Gesture-Presenter-macOS.dmg
+            dist/installer/Gesture-Presenter-Windows-Setup.exe
+            dist/Gesture-Presenter-Linux-x86_64.AppImage

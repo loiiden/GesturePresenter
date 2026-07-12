@@ -3,6 +3,11 @@ import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 hiddenimports = collect_submodules("mediapipe") + collect_submodules("webview")
+icon = (
+    "assets/icon.icns" if sys.platform == "darwin"
+    else "assets/icon.ico" if sys.platform == "win32"
+    else "assets/icon.png"
+)
 datas = [
     ("hand_landmarker.task", "."),
     ("frontend", "frontend"),
@@ -32,11 +37,17 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon=icon,
 )
 if sys.platform == "darwin":
     app = BUNDLE(
         exe,
         name="Gesture Presenter.app",
-        icon=None,
+        icon="assets/icon.icns",
         bundle_identifier="com.gesturepresenter.app",
+        info_plist={
+            "NSCameraUsageDescription": "Gesture Presenter uses the camera to recognize presentation gestures.",
+            "NSMicrophoneUsageDescription": "Gesture Presenter uses the microphone only when optional voice control is enabled.",
+            "NSHighResolutionCapable": True,
+        },
     )

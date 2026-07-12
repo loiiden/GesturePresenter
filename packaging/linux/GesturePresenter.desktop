@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Gesture Presenter
+Comment=Control presentations with natural hand gestures
+Exec=GesturePresenter
+Icon=gesture-presenter
+Categories=Utility;Presentation;
+Terminal=false
