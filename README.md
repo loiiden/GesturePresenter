@@ -29,7 +29,7 @@ Windows, or Linux and restored the next time the app starts.
 | Right | Thumb up | Play/pause media |
 | Right | Held V sign | Mission Control/task overview |
 | Left | Held open palm | Lock/unlock gesture controls |
-| Left | Hold fist and speak, then open | Dictate, when voice is enabled |
+| Left | Hold fist and speak, then release | Transcribe and paste automatically |
 
 Press `L` to lock or unlock controls from the keyboard.
 

@@ -31,7 +31,7 @@ jobs:
           mkdir -p dist/dmg
           cp -R "dist/Gesture Presenter.app" dist/dmg/
           ln -s /Applications dist/dmg/Applications
-          hdiutil create -volname "Gesture Presenter" -srcfolder dist/dmg -ov -format UDZO "dist/Gesture-Presenter-macOS.dmg"
+          hdiutil create -size 300m -fs HFS+ -volname "Gesture Presenter" -srcfolder dist/dmg -ov -format UDZO "dist/Gesture-Presenter-macOS.dmg"
 
       - name: Create Windows installer
         if: runner.os == 'Windows'

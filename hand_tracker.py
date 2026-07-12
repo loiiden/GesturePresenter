@@ -153,7 +153,7 @@ def _wrap_text(text: str, font, scale, thickness, max_w: int) -> list[str]:
 def draw_speech_overlay(frame, state: str, text: str, dot_on: bool):
     """Render speech feedback as a centred banner on the camera frame.
 
-    state: "idle" | "recording" | "transcribing" | "overlay"
+    state: "idle" | "recording" | "transcribing" | "paste_pending"
     """
     if state == "idle":
         return
@@ -172,10 +172,10 @@ def draw_speech_overlay(frame, state: str, text: str, dot_on: bool):
         status = "Transcribing..."
         status_col = (0, 200, 255)
         body_lines = []
-    else:  # overlay (result)
-        status = "Thumb up = paste    Fist = cancel"
-        status_col = (180, 180, 180)
-        body_lines = _wrap_text(text or "(nothing heard)", font, 0.7, 2, bw - 30)
+    else:  # paste_pending
+        status = "Pasting transcription…"
+        status_col = (0, 220, 140)
+        body_lines = []
 
     bh = 40 + len(body_lines) * 28 + (10 if body_lines else 0)
 
@@ -198,7 +198,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
         download_model()
 
     # ── Speech state (shared between main loop and speech callbacks) ──────────
-    # "idle" | "recording" | "transcribing" | "overlay"
+    # "idle" | "recording" | "transcribing" | "paste_pending"
     # The camera loop runs on the MAIN thread (macOS requires cv2.imshow there);
     # speech callbacks fire from background threads, so the shared state needs a
     # lock. Feedback is drawn straight onto the camera frame — no second window.
@@ -214,8 +214,8 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
     def _on_result(text):
         nonlocal speech_state, pending_text
         with speech_lock:
-            speech_state = "overlay"
-            pending_text = text
+            pending_text = text.strip()
+            speech_state = "paste_pending" if pending_text else "idle"
 
     recognizer = None
     if app_config.voice_enabled:
@@ -343,6 +343,19 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 elif not left_fist_held and cur_speech == "recording":
                     recognizer.stop_recording()
 
+            # Transcription confirmation is intentionally unnecessary: paste
+            # the first non-empty result as soon as Whisper returns it.
+            auto_paste = ""
+            with speech_lock:
+                if speech_state == "paste_pending":
+                    auto_paste = pending_text
+                    pending_text = ""
+                    speech_state = "idle"
+            if auto_paste:
+                actions.paste_text(auto_paste)
+                last_action = "TRANSCRIPTION PASTED"
+                last_action_until = time.monotonic() + 1.5
+
             # ── Right hand: gestures + cursor ──────────────────────────
             if right_lms:
                 lost_right_frames = 0
@@ -373,15 +386,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 with speech_lock:
                     cur_speech = speech_state
 
-                if cur_speech == "overlay":
-                    if entered == Gesture.FIST_THUMB_UP:
-                        actions.paste_text(pending_text)
-                        with speech_lock:
-                            speech_state = "idle"
-                    elif entered == Gesture.FIST:
-                        with speech_lock:
-                            speech_state = "idle"
-                elif presentation_enabled:
+                if presentation_enabled:
                     if swipe == "left":
                         actions.next_slide()
                         last_action, last_action_until = "NEXT SLIDE", time.monotonic() + 1.2
