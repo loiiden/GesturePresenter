@@ -8,7 +8,8 @@ import pyperclip
 
 
 SYSTEM = platform.system()
-SCROLL_SCALE = 8
+SCROLL_SCALE = 120
+_scroll_remainder = 0.0
 
 
 def move_cursor(x: int, y: int) -> None:
@@ -40,7 +41,10 @@ def toggle_media() -> None:
 
 
 def scroll(dy_norm: float) -> None:
-    amount = int(-dy_norm * SCROLL_SCALE)
+    global _scroll_remainder
+    scaled = -dy_norm * SCROLL_SCALE + _scroll_remainder
+    amount = int(scaled)
+    _scroll_remainder = scaled - amount
     if amount:
         pyautogui.scroll(amount)
 

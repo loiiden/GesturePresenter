@@ -24,6 +24,7 @@ Windows, or Linux and restored the next time the app starts.
 | Right | Isolated index finger | Move presentation pointer |
 | Right | Thumb + index pinch and release | Left click |
 | Right | Thumb + middle pinch | Right click |
+| Right | Index + middle held together, move vertically | Scroll |
 | Right | Open-palm horizontal swipe | Previous/next slide |
 | Right | Held fist | Toggle black screen |
 | Right | Thumb up | Play/pause media |

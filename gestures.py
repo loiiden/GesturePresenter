@@ -18,6 +18,7 @@ class Gesture(str, Enum):
     NONE             = "none"
     POINT            = "point"             # index only          → laser pointer
     V_SIGN           = "v_sign"            # index + middle held → Mission Control
+    TWO_FINGER_SCROLL = "two_finger_scroll" # closed two fingers  → scroll
     PINCH            = "pinch"             # thumb+index still   → click on release
     PINCH_DRAG       = "pinch_drag"
     PINCH_RIGHT      = "pinch_right"       # thumb+middle        → right-click
@@ -109,6 +110,7 @@ class GestureClassifier:
 
     def __init__(self):
         self._index_pinched = False
+        self._middle_pinched = False
 
     def classify(self, lms) -> tuple[Gesture, dict]:
         tip_pos = (lms[INDEX_TIP].x, lms[INDEX_TIP].y)
@@ -123,9 +125,16 @@ class GestureClassifier:
 
         # Right click is deliberately stricter than left click: the index must
         # remain clearly away, preventing an ambiguous three-finger cluster.
-        if (_pinch_ratio(lms, THUMB_TIP, MIDDLE_TIP) < self.PINCH_CLOSE
-                and index_ratio > self.PINCH_OPEN):
-            return Gesture.PINCH_RIGHT, {}
+        middle_ratio = _pinch_ratio(lms, THUMB_TIP, MIDDLE_TIP)
+        middle_threshold = self.PINCH_OPEN if self._middle_pinched else self.PINCH_CLOSE
+        index_points = _is_extended(lms, INDEX_MCP, INDEX_PIP, INDEX_TIP)
+        self._middle_pinched = (
+            middle_ratio < middle_threshold
+            and index_ratio > self.PINCH_OPEN
+            and index_points
+        )
+        if self._middle_pinched:
+            return Gesture.PINCH_RIGHT, {"pos": tip_pos}
 
         ext = _extended_fingers(lms)
         if ext[0] and ext[1] and sum(ext) >= 3:
@@ -133,7 +142,11 @@ class GestureClassifier:
         if ext[0] and not any(ext[1:]):
             return Gesture.POINT, {"pos": tip_pos}
         if ext[0] and ext[1] and not ext[2] and not ext[3]:
-            return Gesture.V_SIGN, {}
+            finger_gap = _pinch_ratio(lms, INDEX_TIP, MIDDLE_TIP)
+            if finger_gap < 0.34:
+                return Gesture.TWO_FINGER_SCROLL, {"pos": tip_pos}
+            if finger_gap > 0.42:
+                return Gesture.V_SIGN, {}
         if not any(ext):
             direction = _thumb_direction(lms)
             if direction == "up":
@@ -228,14 +241,49 @@ class PinchTracker:
 HOLD_FRAMES: dict[Gesture, int] = {
     Gesture.POINT:            2,
     Gesture.V_SIGN:          18,
+    Gesture.TWO_FINGER_SCROLL: 2,
     Gesture.PINCH:            3,
-    Gesture.PINCH_RIGHT:      3,
+    Gesture.PINCH_RIGHT:      4,
     Gesture.OPEN_PALM:        12,
     Gesture.FIST:             12,
     Gesture.FIST_THUMB_LEFT:  10,
     Gesture.FIST_THUMB_RIGHT: 10,
     Gesture.FIST_THUMB_UP:    10,
 }
+
+
+class ScrollTracker:
+    """Smooth vertical motion for a deliberate two-finger scroll pose."""
+    WARMUP_FRAMES = 3
+    MAX_GAP_FRAMES = 2
+    DEADZONE = 0.002
+    MAX_DELTA = 0.04
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        self._frames = 0
+        self._gap = 0
+        self._previous_y = None
+        self._positions = deque(maxlen=3)
+
+    def update(self, active: bool, y: float) -> Optional[float]:
+        if not active:
+            self._gap += 1
+            if self._gap > self.MAX_GAP_FRAMES:
+                self.reset()
+            return None
+        self._gap = 0
+        self._frames += 1
+        self._positions.append(y)
+        smooth_y = sum(self._positions) / len(self._positions)
+        if self._frames < self.WARMUP_FRAMES or self._previous_y is None:
+            self._previous_y = smooth_y
+            return None
+        delta = max(-self.MAX_DELTA, min(self.MAX_DELTA, smooth_y - self._previous_y))
+        self._previous_y = smooth_y
+        return delta if abs(delta) >= self.DEADZONE else None
 
 
 class PalmSwipeTracker:

@@ -15,6 +15,7 @@ import pyautogui
 
 from gestures import (
     Gesture, GestureClassifier, GestureStateMachine, PinchTracker, PalmSwipeTracker,
+    ScrollTracker,
     INDEX_TIP, is_open_palm, is_fist,
 )
 import actions
@@ -58,6 +59,7 @@ GESTURE_COLORS = {
     Gesture.PINCH_RIGHT:      (100, 0, 255),
     Gesture.POINT:            (0, 80, 255),
     Gesture.V_SIGN:           (255, 120, 40),
+    Gesture.TWO_FINGER_SCROLL:(180, 120, 20),
     Gesture.OPEN_PALM:        (0, 255, 140),
     Gesture.FIST:             (0, 60, 255),
     Gesture.FIST_THUMB_LEFT:  (255, 200, 0),
@@ -241,6 +243,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
     state_m     = GestureStateMachine()
     pinch_track = PinchTracker()
     swipe_track = PalmSwipeTracker()
+    scroll_track = ScrollTracker()
 
     cap          = cv2.VideoCapture(app_config.camera_index)
     if not cap.isOpened():
@@ -370,6 +373,20 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 # Use palm geometry directly and let the swipe tracker bridge
                 # brief classification gaps caused by motion blur.
                 swipe = swipe_track.update(is_open_palm(lms), palm_pos)
+                scroll_delta = scroll_track.update(
+                    raw_gesture == Gesture.TWO_FINGER_SCROLL, pos_norm[1]
+                )
+
+                # Pointing and middle-pinch right click keep following the
+                # index tip. Move before dispatching the click so the context
+                # menu opens at the current, not previous-frame, location.
+                if presentation_enabled and raw_gesture in (Gesture.POINT, Gesture.PINCH_RIGHT):
+                    tx, ty = cam_to_screen(
+                        pos_norm[0], pos_norm[1], disp_x, disp_y, scr_w, scr_h
+                    )
+                    cx += SMOOTH * (tx - cx)
+                    cy += SMOOTH * (ty - cy)
+                    actions.move_cursor(int(cx), int(cy))
 
                 for ev in pinch_events if presentation_enabled else ():
                     # In presentation mode a pinch has no drag/scroll meaning;
@@ -381,6 +398,11 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
 
                 if presentation_enabled and entered == Gesture.PINCH_RIGHT:
                     actions.right_click()
+                    last_action, last_action_until = "RIGHT CLICK", time.monotonic() + 1.0
+
+                if presentation_enabled and scroll_delta is not None:
+                    actions.scroll(scroll_delta)
+                    last_action, last_action_until = "SCROLL", time.monotonic() + 0.35
 
                 now = time.time()
                 with speech_lock:
@@ -412,14 +434,6 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                             actions.next_slide()
                             last_action = "NEXT SLIDE"
                         last_action_until = time.monotonic() + 1.2
-
-                # An isolated index finger behaves as a laser pointer. Normal
-                # conversational hand movement never moves the cursor.
-                if presentation_enabled and raw_gesture == Gesture.POINT:
-                    tx, ty = cam_to_screen(pos_norm[0], pos_norm[1], disp_x, disp_y, scr_w, scr_h)
-                    cx += SMOOTH * (tx - cx)
-                    cy += SMOOTH * (ty - cy)
-                    actions.move_cursor(int(cx), int(cy))
 
             else:
                 swipe_track.update(False, (0.0, 0.0))
