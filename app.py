@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
-import multiprocessing as mp
 import queue
 import sys
+import threading
 from dataclasses import asdict
 from pathlib import Path
 
@@ -13,13 +13,12 @@ from config import APP_NAME, AppConfig
 from devices import list_cameras, list_displays
 
 
-def _tracking_process(config: AppConfig, stop_event, ui_queue) -> None:
+def _tracking_worker(config: AppConfig, stop_event, ui_queue) -> None:
     try:
         from hand_tracker import run
         run(config, stop_event, ui_queue)
     except Exception as exc:
         ui_queue.put({"type": "error", "message": str(exc)})
-        raise
 
 
 class AppApi:
@@ -27,7 +26,7 @@ class AppApi:
 
     def __init__(self):
         self.config = AppConfig.load()
-        self.process = None
+        self.worker = None
         self.stop_event = None
         self.ui_queue = None
         self.frame = None
@@ -66,16 +65,16 @@ class AppApi:
         if self._running():
             return {"ok": True}
         self.save_config(values)
-        self.stop_event = mp.Event()
-        self.ui_queue = mp.Queue(maxsize=3)
+        self.stop_event = threading.Event()
+        self.ui_queue = queue.Queue(maxsize=3)
         self.frame = None
         self.error = None
-        self.process = mp.Process(
-            target=_tracking_process,
+        self.worker = threading.Thread(
+            target=_tracking_worker,
             args=(self.config, self.stop_event, self.ui_queue),
             daemon=True,
         )
-        self.process.start()
+        self.worker.start()
         self.message = "Starting camera…"
         return {"ok": True}
 
@@ -87,13 +86,10 @@ class AppApi:
 
     def poll(self) -> dict:
         self._drain_events()
-        if self.process and not self.process.is_alive():
-            code = self.process.exitcode
-            self.process.join()
-            self.process = None
+        if self.worker and not self.worker.is_alive():
+            self.worker.join()
+            self.worker = None
             self.stop_event = None
-            if code and not self.error:
-                self.error = "Tracking stopped unexpectedly. Check camera permissions."
             if not self.error:
                 self.message = "Stopped"
         frame, self.frame = self.frame, None
@@ -122,25 +118,22 @@ class AppApi:
             pass
 
     def _running(self) -> bool:
-        return bool(self.process and self.process.is_alive())
+        return bool(self.worker and self.worker.is_alive())
 
     def shutdown(self) -> None:
         if self.stop_event:
             self.stop_event.set()
-        if self.process:
-            self.process.join(timeout=2)
-            if self.process.is_alive():
-                self.process.terminate()
+        if self.worker:
+            self.worker.join(timeout=2)
 
 
 def main() -> None:
-    mp.freeze_support()
     api = AppApi()
     bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
     page = bundle_dir / "frontend" / "index.html"
     window = webview.create_window(
         APP_NAME, page.as_uri(), js_api=api, width=1100, height=760,
-        min_size=(860, 620), background_color="#0b1020",
+        min_size=(860, 620), background_color="#f5f5f7",
     )
     window.events.closed += api.shutdown
     webview.start(debug=False)
