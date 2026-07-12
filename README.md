@@ -34,70 +34,100 @@ Windows, or Linux and restored the next time the app starts.
 
 Press `L` to lock or unlock controls from the keyboard.
 
-## Run from source (step by step)
+## Run from source
 
-These steps take you from a clean machine to a running app. **macOS is shown
-first**; Windows and Linux differences follow each step. Python 3.10–3.12 is
-supported, and running from source works on all three platforms.
+The app needs **Python 3.10–3.12** and several dependencies. The simplest way to
+get all of that right — on any OS — is [**uv**](https://docs.astral.sh/uv/),
+which downloads a compatible Python for you and manages the environment. You do
+**not** need to install Python yourself when using uv.
 
-### 1. Install prerequisites
+> **Why uv?** It automatically fetches a supported interpreter (3.10–3.12), so it
+> works even on newer distributions such as **Ubuntu 26**, recent Fedora, or
+> Arch that ship Python **3.13+** — a version some dependencies (e.g. MediaPipe)
+> don't provide wheels for yet. No `pyenv`, no deadsnakes PPA, no version juggling.
 
-You need **Git** and **Python 3.10–3.12**.
+### Quick start with uv (recommended)
 
-- **macOS:** `brew install git python@3.11`
-  (or install Python from [python.org](https://www.python.org/downloads/)).
-- **Windows:** install Python 3.11 from
-  [python.org](https://www.python.org/downloads/) and tick
-  *"Add python.exe to PATH"* during setup. Git from
-  [git-scm.com](https://git-scm.com/download/win).
-- **Linux (Debian/Ubuntu):**
-  ```bash
-  sudo apt update
-  sudo apt install git python3.11 python3.11-venv python3-pip
-  # pywebview needs a WebKitGTK backend:
-  sudo apt install gir1.2-webkit2-4.1
-  # only if you want voice recognition:
-  sudo apt install portaudio19-dev
-  ```
-  Package names vary by distribution.
+1. **Install uv** (no admin rights required):
 
-### 2. Clone the repository
+   ```bash
+   # macOS / Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+   ```powershell
+   # Windows (PowerShell)
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+   Restart your shell afterwards so `uv` is on the `PATH`.
+
+2. **Install and run** the app straight from GitHub:
+
+   ```bash
+   uv tool install git+https://github.com/loiiden/GesturePresenter.git
+   gesture-presenter
+   ```
+
+   With local speech-to-text:
+
+   ```bash
+   uv tool install "gesture-presenter[voice] @ git+https://github.com/loiiden/GesturePresenter.git"
+   ```
+
+   Prefer working from a checkout? Clone it and let uv build the environment on
+   the fly — no manual venv, no activation:
+
+   ```bash
+   git clone https://github.com/loiiden/GesturePresenter.git
+   cd GesturePresenter
+   uv run gesture-presenter          # add --extra voice for speech-to-text
+   ```
+
+3. **Linux only — system libraries.** These aren't Python packages, so uv can't
+   fetch them; install them with your package manager:
+
+   ```bash
+   # pywebview's WebKitGTK backend (Debian/Ubuntu):
+   sudo apt install gir1.2-webkit-6.0     # older releases: gir1.2-webkit2-4.1
+   # only if you enabled voice:
+   sudo apt install portaudio19-dev
+   ```
+   On Ubuntu 26 / newer distros the WebKit package was renamed; if the command
+   above fails, find the right name with `apt search webkit | grep gir`.
+
+### Manual setup with pip (without uv)
+
+If you already have a working **Python 3.10–3.12**, use a plain virtual
+environment. (On distros that only ship Python 3.13+, install 3.12 first — e.g.
+via `pyenv` — or just use uv above.)
 
 ```bash
 git clone https://github.com/loiiden/GesturePresenter.git
 cd GesturePresenter
 ```
 
-### 3. Create a virtual environment and install the app
-
 **macOS / Linux:**
 
 ```bash
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e .            # or:  pip install -e ".[voice]"
+gesture-presenter
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
-```
-
-To include local speech-to-text, install the voice extra instead of the last
-line above:
-
-```bash
-pip install -e ".[voice]"
-```
-
-### 4. Run it
-
-```bash
 gesture-presenter
 ```
+
+Reactivate the environment (`source .venv/bin/activate`, or
+`.\.venv\Scripts\Activate.ps1`) each time before running it. Linux still needs
+the WebKitGTK/PortAudio system packages listed above.
+
+### First launch and permissions
 
 On first launch, grant **camera** and **accessibility / input-control**
 permission when the OS prompts for them. On macOS these live in **System
@@ -156,9 +186,8 @@ release. Tagged workflows do both.
 ### Build locally on macOS
 
 Use Python 3.10–3.12. Build dependencies are developer-only; end users do not
-need Python. Work from a clone of the repository — install the prerequisites and
-clone it as in steps 1–2 of *Run from source* above, then from the project
-directory:
+need Python. Work from a clone of the repository (see *Run from source* above),
+then from the project directory:
 
 ```bash
 python3.11 -m venv .build-venv

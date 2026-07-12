@@ -177,10 +177,25 @@ class AppApi:
             self.worker.join(timeout=2)
 
 
+def _resolve_frontend() -> Path:
+    """Locate the packaged UI across every run mode.
+
+    Running from source or a PyInstaller bundle, ``frontend/`` sits next to this
+    file. Installed via pip/uv/pipx, the data files land flat in
+    ``<sys.prefix>/gesture_presenter/`` (see hand_tracker.py, which resolves the
+    model the same way).
+    """
+    bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    candidates = [
+        bundle_dir / "frontend" / "index.html",
+        Path(sys.prefix) / "gesture_presenter" / "index.html",
+    ]
+    return next((c for c in candidates if c.exists()), candidates[0])
+
+
 def main() -> None:
     api = AppApi()
-    bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
-    page = bundle_dir / "frontend" / "index.html"
+    page = _resolve_frontend()
     window = webview.create_window(
         APP_NAME, page.as_uri(), js_api=api, width=1100, height=760,
         min_size=(860, 620), background_color="#f5f5f7",
