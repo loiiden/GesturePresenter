@@ -58,6 +58,10 @@ function setRunning(value) {
 }
 
 async function handleStart() {
+  if (!initialized) {
+    showError('The application is still loading. Please wait a moment.');
+    return;
+  }
   $('error').hidden = true;
   $('startButton').disabled = true;
   try {
@@ -104,8 +108,17 @@ function bindControls() {
 async function init() {
   bindControls();
   $('statusText').textContent = 'Loading configuration…';
+  // Polling must begin immediately so a tracking session can never start
+  // without the frontend observing its status and preview events.
+  const pollTimer = setInterval(poll, 120);
   try {
     const state = await window.pywebview.api.initial_state();
+    // Give the selects valid values immediately. OS device names are refreshed
+    // afterward and must not block application readiness.
+    applyDevices({
+      cameras: [{id: state.config.camera_index, label: `Camera ${state.config.camera_index + 1}`}],
+      displays: [{id: state.config.display_index, label: `Display ${state.config.display_index + 1}`}],
+    }, state.config);
     apply(state.config);
     setRunning(state.running);
     if (!state.voiceAvailable) {
@@ -113,14 +126,19 @@ async function init() {
       $('voice').checked = false;
       $('voiceHint').textContent = 'Voice components are not installed';
     }
-    await refreshDevices(state.config);
     initialized = true;
+    $('startButton').disabled = false;
+    setRunning(state.running);
     $('statusText').textContent = state.message || 'Camera is off';
+    // Device metadata can take several seconds on macOS. Refresh it in the
+    // background after Start is already safe to use.
+    refreshDevices(state.config);
   } catch (error) {
     initialized = true;
+    $('startButton').disabled = false;
+    $('startButton').textContent = 'Retry start';
     showError(`Application initialization failed: ${error.message || error}`);
   }
-  setInterval(poll, 120);
 }
 
 async function poll() {
