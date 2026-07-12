@@ -34,132 +34,145 @@ Windows, or Linux and restored the next time the app starts.
 
 Press `L` to lock or unlock controls from the keyboard.
 
-## Run from source
+## Install and run (from source)
 
-The app needs **Python 3.10–3.12** and several dependencies. The simplest way to
-get all of that right — on any OS — is [**uv**](https://docs.astral.sh/uv/),
-which downloads a compatible Python for you and manages the environment. You do
-**not** need to install Python yourself when using uv.
+Runs on macOS, Windows, and Linux. Decide **what** to install (your
+configuration), then copy the command for **your OS**. [**uv**](https://docs.astral.sh/uv/)
+is the recommended installer; a plain-`pip` path is given afterwards.
 
-> **Why uv?** It automatically fetches a supported interpreter (3.10–3.12), so it
-> works even on newer distributions such as **Ubuntu 26**, recent Fedora, or
-> Arch that ship Python **3.13+** — a version some dependencies (e.g. MediaPipe)
-> don't provide wheels for yet. No `pyenv`, no deadsnakes PPA, no version juggling.
+### Step 1 — Choose your configuration
 
-### Quick start with uv (recommended)
+Optional features are installed as *extras*, combined with commas (e.g.
+`[gui-qt,voice]`):
 
-1. **Install uv** (no admin rights required):
+| Extra | Adds | Who needs it |
+|---|---|---|
+| *(none)* | Hand-gesture control | Everyone — this is the baseline |
+| `voice` | Local speech-to-text (Whisper) for the fist-and-speak gesture | Optional |
+| `gui-qt` | Qt window backend for pywebview | **Required on Linux only** |
 
-   ```bash
-   # macOS / Linux
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-   ```powershell
-   # Windows (PowerShell)
-   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   ```
-   Restart your shell afterwards so `uv` is on the `PATH`.
+- **macOS / Windows:** the OS provides the window backend — use *(none)* for
+  gestures only, or `voice` to add speech-to-text.
+- **Linux:** always include `gui-qt` (a uv/venv Python can't use the system GTK
+  backend — see [Why `gui-qt` on Linux](#why-gui-qt-is-required-on-linux)). Add
+  `voice` as well if you want speech.
 
-2. **Install and run** the app straight from GitHub.
+### Step 2 — Install with uv (recommended)
 
-   **macOS / Windows** use the built-in system WebView, so nothing extra is
-   needed:
+uv downloads a compatible Python (3.10–3.12) for you, so you never install or
+match Python yourself. This is what makes it work on newer distros (**Ubuntu
+26**, recent Fedora/Arch) that ship Python **3.13+**, which some dependencies
+don't support yet.
 
-   ```bash
-   uv tool install git+https://github.com/loiiden/GesturePresenter.git
-   gesture-presenter
-   ```
+**1. Install uv** (no admin rights):
 
-   **Linux** also needs a GUI backend — add the `gui-qt` extra (see step 3 for
-   why):
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh                                    # macOS / Linux
+```
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
+```
+Restart your shell so `uv` is on the `PATH`.
 
-   ```bash
-   uv tool install "gesture-presenter[gui-qt] @ git+https://github.com/loiiden/GesturePresenter.git"
-   gesture-presenter
-   ```
+**2. Install the app** from GitHub — pick the line for your OS and configuration:
 
-   Combine extras as needed, e.g. `[gui-qt,voice]` on Linux or `[voice]`
-   elsewhere for local speech-to-text.
+```bash
+# ── macOS / Windows ────────────────────────────────────────────────
+# Gestures only
+uv tool install git+https://github.com/loiiden/GesturePresenter.git
+# Gestures + voice
+uv tool install "gesture-presenter[voice] @ git+https://github.com/loiiden/GesturePresenter.git"
 
-   Prefer working from a checkout? Clone it and let uv build the environment on
-   the fly — no manual venv, no activation:
+# ── Linux (always include gui-qt) ──────────────────────────────────
+# Gestures only
+uv tool install "gesture-presenter[gui-qt] @ git+https://github.com/loiiden/GesturePresenter.git"
+# Gestures + voice
+uv tool install "gesture-presenter[gui-qt,voice] @ git+https://github.com/loiiden/GesturePresenter.git"
+```
 
-   ```bash
-   git clone https://github.com/loiiden/GesturePresenter.git
-   cd GesturePresenter
-   uv run gesture-presenter                    # macOS / Windows
-   uv run --extra gui-qt gesture-presenter     # Linux (add ,voice for speech)
-   ```
+**3. Run it:**
 
-3. **Linux only — system libraries.** A few things aren't Python packages, so
-   install them with your package manager:
+```bash
+gesture-presenter
+```
 
-   ```bash
-   sudo apt install libxcb-cursor0      # Qt platform plugin (Ubuntu 24.04+)
-   sudo apt install portaudio19-dev     # only if you enabled voice
-   ```
+> **Changing configuration later?** If the tool is already installed, add
+> `--force` to reinstall with different extras — e.g.
+> `uv tool install --force "gesture-presenter[voice] @ git+…"`.
 
-   *Why `gui-qt`?* pywebview's usual Linux backend, GTK, relies on the system
-   PyGObject (`gi`) and WebKitGTK, which a venv or uv-managed Python **cannot**
-   import (`ModuleNotFoundError: No module named 'gi'`). The `gui-qt` extra
-   installs a self-contained Qt/WebEngine backend that works inside any
-   environment. If you'd rather use the lighter system WebKitGTK, create the venv
-   from your **system** Python with `--system-site-packages` and
-   `sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1`
-   — but the venv's Python version must match the system's, so Qt is the simpler,
-   more reliable path.
-
-### Manual setup with pip (without uv)
-
-If you already have a working **Python 3.10–3.12**, use a plain virtual
-environment. (On distros that only ship Python 3.13+, install 3.12 first — e.g.
-via `pyenv` — or just use uv above.)
+### Alternative — from a clone (for development)
 
 ```bash
 git clone https://github.com/loiiden/GesturePresenter.git
 cd GesturePresenter
+
+uv run gesture-presenter                               # macOS / Windows, gestures only
+uv run --extra voice gesture-presenter                 # macOS / Windows + voice
+uv run --extra gui-qt gesture-presenter                # Linux
+uv run --extra gui-qt --extra voice gesture-presenter  # Linux + voice
 ```
 
-**macOS:**
+### Alternative — plain pip (if you already have Python 3.10–3.12)
 
 ```bash
+git clone https://github.com/loiiden/GesturePresenter.git
+cd GesturePresenter
 python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e .            # or:  pip install -e ".[voice]"
-gesture-presenter
+source .venv/bin/activate            # Windows: .\.venv\Scripts\Activate.ps1
 ```
 
-**Linux** (add the `gui-qt` extra for the GUI backend — see the uv section for why):
+Then install your configuration and run (reactivate the venv each time before
+running):
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[gui-qt]"  # or:  pip install -e ".[gui-qt,voice]"
-sudo apt install libxcb-cursor0    # Qt platform plugin (Ubuntu 24.04+)
+pip install -e .              # gestures only (macOS / Windows)
+pip install -e ".[voice]"     # + voice
+pip install -e ".[gui-qt]"    # Linux  (Linux + voice: ".[gui-qt,voice]")
 gesture-presenter
 ```
 
-**Windows (PowerShell):**
+### System dependencies
 
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .
-gesture-presenter
-```
+- **macOS / Windows:** none. Audio (PortAudio) ships inside the Python wheels and
+  the window backend is built into the OS.
+- **Linux:** install the non-Python libraries with apt:
+  ```bash
+  sudo apt install -y libgl1 libglib2.0-0 libxcb-cursor0   # camera + Qt window
+  sudo apt install -y portaudio19-dev libportaudio2        # only if using voice
+  ```
+  Input control uses X11, so run in an **Xorg session**, not Wayland (log out →
+  ⚙️ → *"Ubuntu on Xorg"*). Verify with `echo $XDG_SESSION_TYPE` → should print
+  `x11`.
 
-Reactivate the environment (`source .venv/bin/activate`, or
-`.\.venv\Scripts\Activate.ps1`) each time before running it.
+### Enabling voice
+
+The `voice` extra installs the packages; the **Whisper model downloads on first
+use** (~0.5 GB, cached in `~/.cache/huggingface`). To use it:
+
+1. Launch the app — the speech-to-text toggle appears **only** when the `voice`
+   packages are installed.
+2. Enable that toggle on the config screen, then press **Start**.
+3. Hold a **left-hand fist, speak, and release** — the text is transcribed and
+   pasted. The first run prints `[speech] loading Whisper 'small' model…`; later
+   runs use the cache.
 
 ### First launch and permissions
 
 On first launch, grant **camera** and **accessibility / input-control**
-permission when the OS prompts for them. On macOS these live in **System
-Settings → Privacy & Security → Camera** and **→ Accessibility**. OpenCV handles
-camera frames internally and opens no extra windows.
+permission when the OS prompts. On macOS these live in **System Settings →
+Privacy & Security → Camera** and **→ Accessibility**. OpenCV handles camera
+frames internally and opens no extra windows.
 
-Next time, reactivate the environment (`source .venv/bin/activate`, or
-`.\.venv\Scripts\Activate.ps1` on Windows) before running `gesture-presenter`.
+### Why `gui-qt` is required on Linux
+
+pywebview's usual Linux backend, GTK, relies on the system PyGObject (`gi`) and
+WebKitGTK, which a venv or uv-managed Python **cannot** import
+(`ModuleNotFoundError: No module named 'gi'`). The `gui-qt` extra ships a
+self-contained Qt/WebEngine backend that works in any environment. To use the
+lighter system WebKitGTK instead, create the venv from your **system** Python
+with `--system-site-packages` plus
+`sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1`
+— but the venv's Python must match the system version, so Qt is the simpler path.
 
 ## Building and releasing installers
 
