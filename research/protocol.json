@@ -1,0 +1,21 @@
+{
+  "gestures": [
+    "none", "point", "pinch", "pinch_right", "open_palm", "fist",
+    "fist_thumb_up", "v_sign", "two_finger_scroll"
+  ],
+  "repetitions": 15,
+  "countdown_seconds": 2.0,
+  "record_seconds": 1.5,
+  "rest_seconds": 1.0,
+  "instructions": {
+    "none": "Move your hand naturally; do not form a command gesture",
+    "point": "Extend only your index finger",
+    "pinch": "Touch thumb and index fingertip",
+    "pinch_right": "Touch thumb and middle fingertip; keep index extended",
+    "open_palm": "Show an open palm with fingers extended",
+    "fist": "Make a fist with the thumb tucked",
+    "fist_thumb_up": "Make a fist and extend the thumb upward",
+    "v_sign": "Make a wide V with index and middle fingers",
+    "two_finger_scroll": "Extend index and middle fingers close together"
+  }
+}

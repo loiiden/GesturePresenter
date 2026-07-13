@@ -21,3 +21,8 @@ build/
 dist/
 *.dmg
 *.AppImage
+
+# Local research artifacts (keep schemas and documentation in Git)
+research/data/
+research/models/
+research/reports/
