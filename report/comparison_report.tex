@@ -1,14 +1,12 @@
 \documentclass[11pt,a4paper]{article}
 
-\usepackage[margin=2.4cm]{geometry}
+\usepackage[margin=2.5cm]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
 \usepackage{microtype}
 \usepackage{booktabs}
-\usepackage{array}
 \usepackage{amsmath}
-\usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{listings}
@@ -22,8 +20,8 @@
   backgroundcolor=\color{black!3}
 }
 
-\title{Personalized Static Hand-Gesture Recognition\\
-\large Classical Machine-Learning Models Compared with Geometric Rules}
+\title{Personalized Hand-Gesture Recognition\\
+\large Classical ML Models Compared with Hand-Written Rules}
 \author{Gesture Presenter --- Machine Learning Course Study}
 \date{13 July 2026}
 
@@ -31,82 +29,72 @@
 \maketitle
 
 \begin{abstract}
-This report presents a personalized, single-participant pilot study built on
-Gesture Presenter, a desktop presentation controller based on MediaPipe hand
-landmarks. The study asks whether a lightweight and explainable classical
-machine-learning model can classify the participant's static gestures more
-accurately than the application's manually designed geometric rules. Camera
-frames were processed locally and were not saved; only 21 three-dimensional
-hand landmarks and experimental metadata were recorded. A class-balanced
-decision tree, random forest, and logistic regression model were trained on two
-recording sessions and evaluated on a held-out third session. The random forest
-performed best, reaching 98.8\% frame-level and 98.5\% trial-level accuracy.
-Logistic regression achieved 95.7\% and 94.8\%, the single tree achieved 91.7\%
-and 93.3\%, and the hard-coded rules achieved 80.0\% and 79.3\%. The largest
-practical difference was rejection of non-command movement: every learned model
-performed substantially better than the rules, and the tree recognized every
-held-out
-\texttt{none} trial, whereas the rules recognized none of them. The result
-supports the feasibility of personalized learned gesture boundaries, but it
-does not establish generalization to other users or action-level superiority in
-the live product.
+Gesture Presenter recognizes hand gestures using MediaPipe landmarks and
+hand-written geometric rules. This study tested whether classical machine
+learning could classify one user's gestures more accurately. A decision tree,
+random forest, and logistic regression model were trained on two recording
+sessions and tested on a separate third session. Only hand landmarks were
+stored; no images or video were saved. The random forest performed best with
+98.5\% trial accuracy, followed by logistic regression with 94.8\%, a decision
+tree with 93.3\%, and the existing rules with 79.3\%. The main improvement was
+recognizing natural, non-command movement instead of incorrectly treating it as
+a command. This is a personalized single-user result and does not show that the
+models generalize to other people.
 \end{abstract}
 
-\section{System context}
+\section{Goal}
 
-Gesture Presenter converts hand movements into presentation actions such as
-pointer movement, clicks, scrolling, slide changes, and media control. Its
-recognition pipeline has two distinct parts:
-\begin{enumerate}
-  \item MediaPipe Hand Landmarker detects a hand and returns 21 landmarks, each
-        with normalized $x$, $y$, and $z$ coordinates.
-  \item Application-specific logic maps those landmarks to gestures and then
-        uses temporal state machines to dispatch actions.
-\end{enumerate}
+Gesture Presenter uses MediaPipe to detect 21 landmarks on a hand. The current
+application then recognizes gestures with manually selected thresholds, such as
+finger joint angles and distances between fingertips. These rules are fast and
+easy to understand, but the same fixed thresholds may not suit every user's hand
+shape and gesture style.
 
-The production gesture classifier is not a learned classifier. It applies
-manually chosen conditions to joint angles, normalized fingertip distances,
-finger-extension states, thumb direction, and finger gaps. For example, an
-index pinch is identified through the normalized distance between the thumb and
-index fingertips, with separate closing and opening thresholds to provide
-hysteresis. This rule system is understandable and efficient, but universal
-thresholds may not match one user's hand shape and gesture style.
-
-\section{Research goal}
-
-The central question was:
+The research question was:
 
 \begin{quote}
-Can a lightweight, explainable classical machine-learning model improve static
-gesture classification for one user across separate recording sessions when
-compared with the existing hand-written geometric classifier?
+Can a small, explainable classical ML model recognize one user's static gestures
+more accurately than the existing hand-written rules across separate recording
+sessions?
 \end{quote}
 
-The experiment was intentionally framed as a \emph{personalized pilot}. With
-one participant and one evening available for data collection, it would not be
-valid to claim population-level or cross-user generalization. The goals were
-instead to:
-\begin{itemize}
-  \item test whether learned boundaries adapt better to the participant;
-  \item compare both classifiers on identical, held-out landmark observations;
-  \item preserve interpretability for later explainable-AI analysis;
-  \item identify gesture classes and failure modes requiring further work; and
-  \item establish a reproducible research workflow without changing the
-        end-user application.
-\end{itemize}
+The aim was not to replace MediaPipe. MediaPipe remained responsible for hand
+detection. The experiment compared two ways of mapping the same landmarks to a
+gesture:
+
+\begin{center}
+Camera $\rightarrow$ MediaPipe landmarks $\rightarrow$
+\{hand-written rules or trained model\} $\rightarrow$ gesture
+\end{center}
+
+This was designed as a personalized pilot because only one participant and one
+evening were available. Therefore, the study measures repeatability for one
+user, not generalization to the public.
 
 \section{Data collection}
 
-\subsection{Guided collection procedure}
+A guided collection script displayed a gesture, a countdown, a 1.5-second
+recording period, and a rest period. Gesture order was randomized. The
+participant used the right hand and recorded three sessions:
 
-A separate playground script guided the participant through randomized gesture
-trials. For each trial, the interface displayed the target gesture, a countdown,
-a 1.5-second recording interval, and a rest interval. The nominal protocol used
-15 repetitions of each of nine classes, producing 135 prompted trials per
-session. The participant used the right hand, which is the presentation-control
-hand in the product.
+\begin{table}[ht]
+\centering
+\caption{Dataset and experimental split.}
+\begin{tabular}{lrrl}
+\toprule
+Session & Frames & Grouped trials & Use \\
+\midrule
+S01 & 5,284 & 135 & Training \\
+S02 & 3,509 & 135 & Training \\
+S03 & 4,762 & 135 & Final evaluation \\
+\midrule
+Total & 13,555 & 405 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-The nine labels were:
+Nine classes were recorded:
+
 \begin{center}
 \begin{tabular}{lll}
 \toprule
@@ -117,521 +105,261 @@ The nine labels were:
 \end{tabular}
 \end{center}
 
-The \texttt{none} class represented natural hand motion without an intended
-command. It is especially important in an interaction system: a classifier that
-performs well only on carefully posed commands may still trigger actions during
-ordinary movement.
+The \texttt{none} class contained natural hand movement without an intended
+command. It is important because false commands are particularly disruptive in
+a presentation controller.
 
-Three sessions were recorded. Sessions \texttt{S01} and \texttt{S02} formed the
-training data. Session \texttt{S03} was excluded during training and reserved
-for the final comparison.
+Camera frames were processed locally and immediately discarded. Each saved CSV
+row contained the participant, session and trial identifiers, gesture label,
+timestamp, handedness information, and the $(x,y,z)$ coordinates of all 21
+landmarks. No original footage was stored. Landmark data is less sensitive than
+video, although it should not be described as completely anonymous.
 
-\begin{table}[ht]
-\centering
-\caption{Observed dataset size. A trial is a grouped prompted repetition; frames
-within a trial are temporally correlated.}
-\begin{tabular}{lrrl}
-\toprule
-Session & Frames & Grouped trials & Role \\
-\midrule
-S01 & 5,284 & 135 & Training \\
-S02 & 3,509 & 135 & Training \\
-S03 & 4,762 & 135 & Held-out evaluation \\
-\midrule
-Total & 13,555 & 405 & --- \\
-\bottomrule
-\end{tabular}
-\end{table}
+\section{Features and models}
 
-\subsection{Privacy and stored schema}
+Each frame was represented by 77 features:
 
-All camera processing occurred locally. Original images and video were not
-written to disk. Each stored CSV row represented one detected frame and
-contained:
 \begin{itemize}
-  \item a pseudonymous participant identifier;
-  \item session and trial identifiers;
-  \item the prompted gesture label;
-  \item frame index and relative timestamp;
-  \item handedness and handedness confidence; and
-  \item the $(x,y,z)$ coordinates of all 21 MediaPipe landmarks.
-\end{itemize}
-
-Landmark-only storage substantially reduces privacy exposure and dataset size,
-although derived hand geometry should not be described as fully anonymous.
-
-\section{Feature representation}
-
-Each frame was converted into 77 numerical features. First, all landmarks were
-translated so that the wrist was the origin. Coordinates were then divided by
-the three-dimensional wrist-to-middle-finger-MCP distance:
-\begin{equation}
-\tilde{\mathbf{p}}_i =
-\frac{\mathbf{p}_i-\mathbf{p}_{\mathrm{wrist}}}
-{\lVert\mathbf{p}_{\mathrm{middle\ MCP}}-\mathbf{p}_{\mathrm{wrist}}\rVert_2}.
-\end{equation}
-This produces 63 normalized coordinate features and reduces sensitivity to hand
-position and apparent size in the camera image.
-
-Fourteen engineered features were appended:
-\begin{itemize}
-  \item thumb--index, thumb--middle, and index--middle fingertip distances;
-  \item thumb-tip to index-MCP distance;
+  \item 63 coordinates: 21 landmarks with $x$, $y$, and $z$ values;
+  \item four normalized distances between important hand points;
   \item horizontal and vertical thumb displacement;
-  \item normalized index, middle, ring, and little-finger joint angles; and
-  \item the four fingertip distances from the wrist.
+  \item four finger joint angles; and
+  \item four fingertip-to-wrist distances.
 \end{itemize}
 
-These features reflect the geometry already considered by the rule classifier,
-which makes the learned model suitable for later comparison of manual and
-learned decision thresholds.
+Coordinates were translated so the wrist became the origin and divided by hand
+size. This reduces sensitivity to where the hand appears in the image and how
+close it is to the camera.
 
-\section{Models and the decision-tree rationale}
+Three models were trained with balanced class weights and random seed 42:
 
-The research tooling supports logistic regression, a random forest, and a
-decision tree. All three were evaluated, but the decision tree was initially
-chosen as the primary explainable model for four reasons.
-
-\paragraph{Interpretability.}
-Every prediction follows a path of explicit feature-threshold decisions. It is
-therefore possible to explain why a frame was classified as a pinch or a fist
-and to compare learned thresholds directly with the production rules.
-
-\paragraph{Non-linear class boundaries.}
-Gesture classes are defined by combinations of conditions rather than by a
-single linear separation. A tree can naturally express statements such as a
-small thumb--index distance together with a sufficiently extended index finger.
-
-\paragraph{Little preprocessing and fast inference.}
-Trees do not require feature standardization and are inexpensive enough for
-real-time local inference. This is appropriate for a desktop controller.
-
-\paragraph{Appropriate baseline complexity.}
-A random forest may achieve greater robustness but is less transparent because
-a prediction aggregates many trees. The purpose of this pilot was not only to
-maximize accuracy, but also to retain a model whose behavior can be inspected.
-
-The fitted tree used a maximum depth of 8, a minimum of 5 training frames
-per leaf, balanced class weights, and a fixed random seed of 42. Class balancing
-reduces the influence of unequal numbers of detected frames across gestures.
-The random forest contained 250 trees, used a minimum of 3 frames per leaf,
-balanced class weights, and the same seed. Logistic regression used standardized
-features, balanced class weights, and at most 2,000 optimization iterations.
-Logistic regression tests whether approximately linear class boundaries are
-sufficient, while the forest tests the benefit of an ensemble of non-linear
-trees at the cost of direct interpretability.
-
-\section{Experimental design}
-
-Each learned model was fitted on 8,793 frames from 270 trials in \texttt{S01} and
-\texttt{S02}. No frame from \texttt{S03} was available during fitting. The
-serialized model records its training sessions, and the comparison program
-refuses to evaluate a session that overlaps with them unless the safeguard is
-explicitly overridden.
-
-For the final comparison, all four classifiers received the same 4,762 held-out
-landmark frames in the same order. The production \texttt{GestureClassifier}
-was reset at every trial so that its pinch hysteresis could not carry state from
-one prompted repetition into another.
-
-Two evaluation levels were used:
 \begin{description}
-  \item[Frame level:] every detected frame was scored separately.
-  \item[Trial level:] frame predictions within a prompted trial were combined
-  using majority voting, and the resulting trial prediction was scored.
+  \item[Decision tree:] maximum depth 8 and at least 5 frames per leaf. It was
+  selected first because each prediction can be explained as a short sequence
+  of feature thresholds and compared directly with the manual rules.
+
+  \item[Random forest:] 250 trees and at least 3 frames per leaf. Combining many
+  trees normally improves stability, but makes individual decisions less direct
+  to explain.
+
+  \item[Logistic regression:] standardized features and up to 2,000 training
+  iterations. This tests whether simpler, approximately linear boundaries are
+  sufficient for the engineered features.
 \end{description}
 
-Trial-level evaluation is primary because neighboring frames are not
-independent observations and because a stable interpretation over an entire
-gesture is closer to the intended interaction. Accuracy, per-class precision,
-recall, F1 score, and confusion matrices were reported. Precision is the
-fraction of predictions for a class that are correct; recall is the fraction of
-true examples of that class that are recovered.
+The existing geometric classifier was the baseline. It uses finger-extension
+tests, joint angles, fingertip distances, thumb direction, and manually chosen
+thresholds.
 
-This experiment compares static classification only. It does not compare the
-complete action pipeline, which additionally includes hold thresholds,
-debouncing, swipe tracking, scrolling trajectories, and action cooldowns.
+\section{Evaluation}
+
+All learned models were trained on 8,793 frames from S01 and S02. S03 was
+excluded from training and used only for evaluation. The comparison program
+checks model metadata and refuses to evaluate a session that was used for
+training. All classifiers received the same S03 landmarks in the same order.
+
+Two accuracy measures were calculated:
+
+\begin{description}
+  \item[Frame accuracy] scores every camera frame independently.
+  \item[Trial accuracy] combines all frame predictions in one prompted
+  repetition using majority voting.
+\end{description}
+
+Trial accuracy is the main measure because adjacent frames are highly similar
+and are not independent samples. One complete gesture repetition is a more
+meaningful unit than one frame.
+
+For each gesture, precision and recall describe different types of error:
+
+\[
+\text{Precision} = \frac{TP}{TP+FP},
+\qquad
+\text{Recall} = \frac{TP}{TP+FN},
+\]
+
+where $TP$ is the number of correct predictions of that gesture, $FP$ is the
+number of other gestures incorrectly predicted as that gesture, and $FN$ is the
+number of real examples of that gesture that the classifier missed. Precision
+therefore asks, ``When the model predicts this gesture, how often is it
+correct?'' Recall asks, ``Of all real examples of this gesture, how many did the
+model find?''
+
+The F1 score combines precision and recall using their harmonic mean:
+
+\[
+F1 = 2\cdot
+\frac{\text{Precision}\cdot\text{Recall}}
+{\text{Precision}+\text{Recall}}.
+\]
+
+F1 ranges from 0 to 1. A value of 1 means that a gesture was found every time
+and was never predicted incorrectly. A low value means that precision, recall,
+or both were poor. F1 is useful here because accuracy alone can hide a serious
+problem with one gesture class. For example, a classifier may be accurate
+overall while frequently missing pinches or treating natural movement as a
+command.
+
+Macro F1 is the unweighted mean of the F1 scores for all $K$ gesture classes:
+
+\[
+\text{Macro F1} = \frac{1}{K}\sum_{k=1}^{K} F1_k.
+\]
+
+Every gesture contributes equally to macro F1, regardless of how many examples
+it has. This makes it appropriate for this dataset because the held-out class
+supports are not exactly equal.
+
+This comparison covers static classification only. The live application also
+uses hold durations, debouncing, swipe tracking, scrolling trajectories, and
+cooldowns. Therefore, the experiment does not yet measure actual unintended
+clicks or slide changes.
 
 \section{Results}
 
-\subsection{Overall performance}
+\subsection{Overall comparison}
 
 \begin{table}[ht]
 \centering
-\caption{Held-out performance on session S03.}
-\begin{tabular}{lrr}
+\caption{Results on the held-out S03 session.}
+\begin{tabular}{lrrr}
 \toprule
-Classifier & Frame accuracy & Trial accuracy \\
+Classifier & Frame accuracy & Trial accuracy & Correct trials \\
 \midrule
-Random forest & \textbf{98.8\%} & \textbf{98.5\%} \\
-Logistic regression & 95.7\% & 94.8\% \\
-Decision tree & 91.7\% & 93.3\% \\
-Hard-coded rules & 80.0\% & 79.3\% \\
-\midrule
-Forest--rules difference & +18.8 percentage points & +19.2 percentage points \\
+Random forest & \textbf{98.8\%} & \textbf{98.5\%} & 133/135 \\
+Logistic regression & 95.7\% & 94.8\% & 128/135 \\
+Decision tree & 91.7\% & 93.3\% & 126/135 \\
+Hand-written rules & 80.0\% & 79.3\% & 107/135 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The forest classified 133 of 135 grouped trials correctly, logistic regression
-approximately 128, the decision tree approximately 126, and the rules
-approximately 107. Trial voting improved the tree's
-accuracy relative to its frame accuracy, indicating that many tree errors were
-brief rather than dominant throughout a repetition. The rule classifier did not
-show the same benefit.
+All three learned models outperformed the rules. The random forest improved
+trial accuracy by 19.2 percentage points and made only two trial-level errors.
+The single decision tree was less accurate than the forest but remains much
+easier to explain because it uses one visible path of threshold decisions.
 
-\subsection{Per-class performance}
+\subsection{Performance by gesture}
+
+Table~\ref{tab:f1} summarizes trial-level F1 scores. F1 combines precision
+(how often a prediction is correct) and recall (how many real examples are
+found).
 
 \begin{table}[ht]
 \centering
-\caption{Decision-tree trial-level results.}
+\caption{Trial-level F1 score by gesture.}
+\label{tab:f1}
 \small
 \begin{tabular}{lrrrr}
 \toprule
-Class & Precision & Recall & F1 & Support \\
+Gesture & Forest & Logistic & Tree & Rules \\
 \midrule
-fist & 1.00 & 0.93 & 0.97 & 15 \\
-fist\_thumb\_up & 0.92 & 1.00 & 0.96 & 12 \\
-none & 0.82 & 1.00 & 0.90 & 14 \\
-open\_palm & 1.00 & 1.00 & 1.00 & 19 \\
-pinch & 1.00 & 0.63 & 0.77 & 19 \\
-pinch\_right & 0.82 & 1.00 & 0.90 & 14 \\
-point & 0.92 & 1.00 & 0.96 & 11 \\
-two\_finger\_scroll & 1.00 & 0.94 & 0.97 & 18 \\
-v\_sign & 0.93 & 1.00 & 0.96 & 13 \\
+fist & 1.00 & 1.00 & 0.97 & 0.73 \\
+fist\_thumb\_up & 1.00 & 0.89 & 0.96 & 0.89 \\
+none & 1.00 & 0.93 & 0.90 & 0.00 \\
+open\_palm & 1.00 & 1.00 & 1.00 & 0.84 \\
+pinch & 0.97 & 0.88 & 0.77 & 0.83 \\
+pinch\_right & 0.97 & 0.93 & 0.90 & 0.85 \\
+point & 0.96 & 0.96 & 0.96 & 0.63 \\
+two\_finger\_scroll & 0.97 & 0.94 & 0.97 & 1.00 \\
+v\_sign & 1.00 & 1.00 & 0.96 & 0.92 \\
 \midrule
-Macro average & 0.94 & 0.95 & 0.93 & 135 \\
-Weighted average & 0.94 & 0.93 & 0.93 & 135 \\
+Macro average & 0.99 & 0.95 & 0.93 & 0.67 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[ht]
-\centering
-\caption{Random-forest trial-level results.}
-\small
-\begin{tabular}{lrrrr}
-\toprule
-Class & Precision & Recall & F1 & Support \\
-\midrule
-fist & 1.00 & 1.00 & 1.00 & 15 \\
-fist\_thumb\_up & 1.00 & 1.00 & 1.00 & 12 \\
-none & 1.00 & 1.00 & 1.00 & 14 \\
-open\_palm & 1.00 & 1.00 & 1.00 & 19 \\
-pinch & 1.00 & 0.95 & 0.97 & 19 \\
-pinch\_right & 0.93 & 1.00 & 0.97 & 14 \\
-point & 0.92 & 1.00 & 0.96 & 11 \\
-two\_finger\_scroll & 1.00 & 0.94 & 0.97 & 18 \\
-v\_sign & 1.00 & 1.00 & 1.00 & 13 \\
-\midrule
-Macro average & 0.98 & 0.99 & 0.99 & 135 \\
-Weighted average & 0.99 & 0.99 & 0.99 & 135 \\
-\bottomrule
-\end{tabular}
-\end{table}
+The most important result was the \texttt{none} class:
 
-\begin{table}[ht]
-\centering
-\caption{Logistic-regression trial-level results.}
-\small
-\begin{tabular}{lrrrr}
-\toprule
-Class & Precision & Recall & F1 & Support \\
-\midrule
-fist & 1.00 & 1.00 & 1.00 & 15 \\
-fist\_thumb\_up & 0.80 & 1.00 & 0.89 & 12 \\
-none & 0.93 & 0.93 & 0.93 & 14 \\
-open\_palm & 1.00 & 1.00 & 1.00 & 19 \\
-pinch & 1.00 & 0.79 & 0.88 & 19 \\
-pinch\_right & 0.88 & 1.00 & 0.93 & 14 \\
-point & 0.92 & 1.00 & 0.96 & 11 \\
-two\_finger\_scroll & 1.00 & 0.89 & 0.94 & 18 \\
-v\_sign & 1.00 & 1.00 & 1.00 & 13 \\
-\midrule
-Macro average & 0.95 & 0.96 & 0.95 & 135 \\
-Weighted average & 0.96 & 0.95 & 0.95 & 135 \\
-\bottomrule
-\end{tabular}
-\end{table}
+\begin{itemize}
+  \item the forest and decision tree recognized all 14 \texttt{none} trials;
+  \item logistic regression recognized 13 of 14;
+  \item the rules recognized 0 of 14.
+\end{itemize}
 
-\begin{table}[ht]
-\centering
-\caption{Hard-coded-rule trial-level results. The rule classifier also produced
-one \texttt{fist\_thumb\_left} prediction, although this class was not a target
-in the collected protocol.}
-\small
-\begin{tabular}{lrrrr}
-\toprule
-Class & Precision & Recall & F1 & Support \\
-\midrule
-fist & 0.67 & 0.80 & 0.73 & 15 \\
-fist\_thumb\_up & 0.80 & 1.00 & 0.89 & 12 \\
-none & 0.00 & 0.00 & 0.00 & 14 \\
-open\_palm & 0.73 & 1.00 & 0.84 & 19 \\
-pinch & 0.88 & 0.79 & 0.83 & 19 \\
-pinch\_right & 0.74 & 1.00 & 0.85 & 14 \\
-point & 0.75 & 0.55 & 0.63 & 11 \\
-two\_finger\_scroll & 1.00 & 1.00 & 1.00 & 18 \\
-v\_sign & 1.00 & 0.85 & 0.92 & 13 \\
-\midrule
-Macro average including extra predicted class & 0.66 & 0.70 & 0.67 & 135 \\
-Weighted average & 0.74 & 0.79 & 0.76 & 135 \\
-\bottomrule
-\end{tabular}
-\end{table}
+The rules interpreted the 14 natural-movement trials as seven open palms, three
+fists, two pinches, one point, and one thumb-left gesture. These would be
+potential false commands before temporal filtering is applied.
 
-\subsection{Confusion matrices}
+The random forest made only two errors: one true index pinch was predicted as
+point, and one two-finger-scroll pose was predicted as right-click pinch. The
+single decision tree's main weakness was index pinch. It recognized 12 of 19
+pinch trials; the other seven were distributed across five other classes. The
+forest increased pinch recall from 0.63 to 0.95, showing the benefit of combining
+multiple trees.
 
-For compactness, the matrices below use class abbreviations: FI (fist), TU
-(thumb up), NO (none), OP (open palm), PI (index pinch), PR (middle-finger
-pinch/right click), PO (point), TS (two-finger scroll), VS (V sign), and TL
-(thumb left). Rows are true classes and columns are predictions.
+Logistic regression produced strong results with a simpler decision function.
+Its mistakes were mainly pinch and two-finger-scroll examples. The numerical
+backend printed overflow warnings during fitting, but the input features,
+trained coefficients, predictions, and model output were checked and were all
+finite. The training completed in 78 iterations. This score should still be
+reproduced in a clean environment before being treated as a final benchmark.
 
-\begin{table}[ht]
-\centering
-\caption{Decision-tree trial confusion matrix.}
-\scriptsize
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{lrrrrrrrrr}
-\toprule
- & FI & TU & NO & OP & PI & PR & PO & TS & VS \\
-\midrule
-FI & 14&0&1&0&0&0&0&0&0\\
-TU & 0&12&0&0&0&0&0&0&0\\
-NO & 0&0&14&0&0&0&0&0&0\\
-OP & 0&0&0&19&0&0&0&0&0\\
-PI & 0&1&2&0&12&2&1&0&1\\
-PR & 0&0&0&0&0&14&0&0&0\\
-PO & 0&0&0&0&0&0&11&0&0\\
-TS & 0&0&0&0&0&1&0&17&0\\
-VS & 0&0&0&0&0&0&0&0&13\\
-\bottomrule
-\end{tabular}
-\end{table}
+\section{What the results mean}
 
-\begin{table}[ht]
-\centering
-\caption{Random-forest trial confusion matrix.}
-\scriptsize
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{lrrrrrrrrr}
-\toprule
- & FI & TU & NO & OP & PI & PR & PO & TS & VS \\
-\midrule
-FI &15&0&0&0&0&0&0&0&0\\
-TU &0&12&0&0&0&0&0&0&0\\
-NO &0&0&14&0&0&0&0&0&0\\
-OP &0&0&0&19&0&0&0&0&0\\
-PI &0&0&0&0&18&0&1&0&0\\
-PR &0&0&0&0&0&14&0&0&0\\
-PO &0&0&0&0&0&0&11&0&0\\
-TS &0&0&0&0&0&1&0&17&0\\
-VS &0&0&0&0&0&0&0&0&13\\
-\bottomrule
-\end{tabular}
-\end{table}
+For this participant, learned decision boundaries transferred from two sessions
+to a separate third session better than the fixed rules. The random forest was
+the best predictive model. The decision tree remains the best choice for direct
+XAI because its learned thresholds can be read and compared with the existing
+manual thresholds.
 
-\begin{table}[ht]
-\centering
-\caption{Logistic-regression trial confusion matrix.}
-\scriptsize
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{lrrrrrrrrr}
-\toprule
- & FI & TU & NO & OP & PI & PR & PO & TS & VS \\
-\midrule
-FI &15&0&0&0&0&0&0&0&0\\
-TU &0&12&0&0&0&0&0&0&0\\
-NO &0&0&13&0&0&1&0&0&0\\
-OP &0&0&0&19&0&0&0&0&0\\
-PI &0&2&0&0&15&1&1&0&0\\
-PR &0&0&0&0&0&14&0&0&0\\
-PO &0&0&0&0&0&0&11&0&0\\
-TS &0&1&1&0&0&0&0&16&0\\
-VS &0&0&0&0&0&0&0&0&13\\
-\bottomrule
-\end{tabular}
-\end{table}
+The strongest product-relevant finding is not only higher accuracy. It is the
+ability to reject natural hand movement. The current rules are good at several
+clearly posed gestures, including two-finger scroll, but often force ordinary
+movement into a command class. The learned models captured the participant's
+non-command poses much better.
 
-\begin{table}[ht]
-\centering
-\caption{Hard-coded-rule trial confusion matrix.}
-\scriptsize
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{lrrrrrrrrrr}
-\toprule
- & FI & TL & TU & NO & OP & PI & PR & PO & TS & VS \\
-\midrule
-FI &12&0&3&0&0&0&0&0&0&0\\
-TU &0&0&12&0&0&0&0&0&0&0\\
-NO &3&1&0&0&7&2&0&1&0&0\\
-OP &0&0&0&0&19&0&0&0&0&0\\
-PI &3&0&0&0&0&15&0&1&0&0\\
-PR &0&0&0&0&0&0&14&0&0&0\\
-PO &0&0&0&0&0&0&5&6&0&0\\
-TS &0&0&0&0&0&0&0&0&18&0\\
-VS &0&0&0&2&0&0&0&0&0&11\\
-\bottomrule
-\end{tabular}
-\end{table}
+The valid conclusion is:
 
-\section{Interpretation}
+\begin{quote}
+For one participant, three classical ML models trained on two sessions achieved
+higher static gesture-classification accuracy than the existing rules on a
+held-out third session. The random forest was most accurate, while the single
+decision tree offered the clearest explanations.
+\end{quote}
 
-\subsection{Comparison of learned models}
+It would not be valid to claim that these models work for arbitrary users or
+that the random forest is already better in the complete live application.
 
-The random forest was the strongest classifier by a clear margin. It made only
-two trial-level errors: one index-pinch trial became point, and one two-finger
-scroll trial became middle-finger pinch. Ensembling reduced the instability of
-the single tree, especially for index pinch, whose recall rose from 0.63 to
-0.95. The trade-off is explainability: feature importance and per-prediction
-methods can explain a forest, but its decisions cannot be summarized as one
-short rule path.
-
-Logistic regression ranked second, showing that the normalized and engineered
-features already separate many gestures with comparatively simple boundaries.
-Its remaining errors were concentrated in pinch and two-finger-scroll trials.
-During fitting, the numerical backend emitted transient matrix-overflow
-warnings. All input features, fitted coefficients, intercepts, and predictions
-were verified as finite, and optimization completed in 78 iterations. The score
-is therefore reported, but a clean-environment reproduction is advisable before
-using it as a final benchmark.
-
-The single decision tree remains the most directly interpretable learned model.
-Its lower accuracy is the cost of representing the entire classification space
-with one hierarchy of threshold decisions. Thus model choice depends on the
-research priority: the forest is currently best for predictive performance,
-while the single tree is best for direct rule-level XAI.
-
-\subsection{Rejection of non-command movement}
-
-The most important difference was the \texttt{none} class. The tree and forest
-recovered all 14 held-out \texttt{none} trials, and logistic regression recovered
-13. The rule classifier recovered none: seven
-were interpreted as open palm, three as fist, two as pinch, one as point, and
-one as thumb left. In a live system these errors represent potential false
-commands, although the production temporal state machines may suppress some
-short-lived static misclassifications.
-
-This result suggests that a personalized model can learn not only the intended
-poses but also the participant's natural non-command hand configurations. The
-comparison should therefore not be summarized only as an accuracy increase;
-improved rejection is the more product-relevant finding.
-
-\subsection{Strengths and weakness of the tree}
-
-The tree achieved perfect trial recall for thumb up, none, open palm,
-middle-finger pinch, point, and V sign. It also achieved perfect precision and
-recall for open palm. Its principal weakness was index pinch: precision was
-1.00, but recall was only 0.63. Seven of 19 true pinch trials were assigned to
-other classes: two to none, two to middle-finger pinch, and one each to thumb
-up, point, and V sign. Thus the tree was conservative when emitting an index
-pinch but did not create false index-pinch predictions.
-
-This failure pattern provides a focused XAI question for further analysis:
-which feature thresholds cause valid pinch frames to follow paths toward these
-other leaves, and how do those thresholds compare with the manual normalized
-pinch threshold?
-
-\subsection{Strengths and weakness of the rules}
-
-The rules performed perfectly on two-finger scroll and recovered every open
-palm, thumb-up, and middle-finger-pinch trial. However, high recall sometimes
-coincided with lower precision. Open palm, for example, absorbed seven
-non-command trials. Point was another major weakness: only six of 11 point
-trials were recovered, while five were interpreted as middle-finger pinch.
-
-The rules encode useful domain knowledge and remain valuable as an interpretable
-baseline. Their weakness in this study is not a lack of logic, but the use of
-fixed boundaries that were not calibrated to this participant or to the
-observed distribution of natural movement.
-
-\section{Validity and limitations}
+\section{Limitations and next steps}
 
 \begin{enumerate}
-  \item \textbf{One participant.} The experiment establishes only within-user,
-  across-session performance. It provides no evidence of generalization to
-  other hand shapes, movement styles, skin appearances, cameras, or mobility
-  characteristics.
+  \item Only one person participated, so there is no cross-user evidence.
 
-  \item \textbf{Static classification only.} The comparison excludes the full
-  temporal action pipeline. Consequently, it cannot yet show a reduction in
-  actual unintended clicks or slide changes.
+  \item Adjacent frames are correlated. Trial-level results are more meaningful
+  than the larger frame count.
 
-  \item \textbf{Correlated frames.} Thousands of frames do not represent
-  thousands of independent examples. Trial-level results are therefore primary.
+  \item The class supports in S03 range from 11 to 19 instead of exactly 15.
+  This is consistent with restarting randomized collection using the same
+  session and trial identifiers, which can mix frames inside a grouped trial.
+  A final confirmation session should use a fresh session ID and must not be
+  used to tune the existing models.
 
-  \item \textbf{Trial-identifier reuse in S03.} The nominal protocol specifies
-  15 trials per class, but the grouped held-out supports range from 11 to 19
-  while still totaling 135. This pattern is consistent with restarting a
-  randomized collection under the same session and trial identifiers, causing
-  frames from differently prompted repetitions to share a grouping key. The
-  frame labels remain present, but some trial-majority groups are mixed. This
-  weakens the cleanliness of the trial-level estimate. A final confirmatory
-  session should use a fresh session ID and must not be used to retrain or tune
-  the current model.
+  \item The models were compared using fixed configurations. S03 must not now be
+  reused for hyperparameter selection, because that would leak test information.
 
-  \item \textbf{No statistical significance test.} The report presents a
-  descriptive paired comparison. Confidence intervals or a paired test should
-  be added only after producing clean, uniquely identified held-out trials.
-
-  \item \textbf{Limited model search.} Three preconfigured classical models
-  were compared without hyperparameter optimization. Evaluating many settings
-  against the same held-out session would itself leak test information, so S03
-  must not now be used for model tuning.
-\end{enumerate}
-
-\section{Conclusion and future work}
-
-For this participant, all three learned models generalized from two recording
-sessions to a held-out third session better than the existing geometric rules.
-The random forest performed best, improving trial-level accuracy by 19.2
-percentage points over the rules. Logistic regression ranked second, followed
-by the single decision tree. Most notably, the learned models distinguished
-natural non-command motion from command gestures much more reliably. These
-results support continuing with a personalized learned classifier and XAI
-analysis, but they are not sufficient to replace the production rules.
-
-The next recommended steps are:
-\begin{enumerate}
-  \item collect one clean confirmatory session under a new identifier;
-  \item export and visualize the tree's feature importance and decision paths;
-  \item inspect all misclassified pinch trials and compare learned thresholds
-        with the manual pinch rules;
-  \item measure false actions per minute after applying both systems' temporal
-        filtering; and
-  \item if more participants become available, use participant-grouped or
-        leave-one-person-out evaluation.
+  \item The next XAI step is to visualize the decision tree, inspect feature
+  importance, and explain misclassified pinch trials. The next product-level
+  experiment should apply temporal filtering and measure false actions per
+  minute.
 \end{enumerate}
 
 \appendix
-\section{Reproduction commands}
+\section{Reproduction}
 
-Each model was trained while reserving \texttt{S03}; the model name and output
-file were changed for \texttt{tree}, \texttt{forest}, and \texttt{logistic}:
+The model type can be \texttt{tree}, \texttt{forest}, or \texttt{logistic}:
+
 \begin{lstlisting}
 venv/bin/python -m research.train \
   research/data/landmarks.csv \
-  --model tree \
+  --model forest \
   --exclude-session S03 \
-  --output research/models/tree.joblib
-\end{lstlisting}
+  --output research/models/forest.joblib
 
-The one-to-one comparison was then run on the held-out session:
-\begin{lstlisting}
 venv/bin/python -m research.compare \
-  --model research/models/tree.joblib \
+  --model research/models/forest.joblib \
   --session S03 \
   research/data/landmarks.csv
 \end{lstlisting}
-
-\section{Scope of the claim}
-
-The appropriate conclusion is: \emph{for one participant, three class-balanced
-classical models trained on two sessions achieved higher static gesture-
-classification accuracy than the existing geometric rules on a held-out third
-session, with the random forest achieving the highest accuracy and the single
-tree offering the most direct explanation}. It would be inappropriate to claim
-that the models generalize
-to arbitrary users or that it already improves the complete live application.
 
 \end{document}
