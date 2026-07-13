@@ -31,7 +31,10 @@ voice = [
 gui-qt = ["qtpy>=2.4", "PyQt6>=6.6", "PyQt6-WebEngine>=6.6"]
 build = ["pyinstaller>=6.8"]
 research = [
-  "scikit-learn>=1.4",
+  # joblib/pickle artifacts are not supported across scikit-learn versions.
+  # Keep the research runtime identical to the version used to train the
+  # committed study artifacts and reproduce the reported results.
+  "scikit-learn==1.6.1",
   "joblib>=1.3",
 ]
 
