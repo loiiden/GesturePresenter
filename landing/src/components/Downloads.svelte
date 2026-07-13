@@ -35,7 +35,7 @@
 
   const appCommand = $derived(`uv tool install ${packageSpec}`);
   const forceInstallCommand = $derived(`uv tool install --force ${packageSpec}`);
-  const updateCommand = 'uv tool upgrade gesture-presenter --refresh';
+  const updateCommand = 'uv tool upgrade gesture-presenter';
 
   async function copyCommand(value, key) {
     try {
@@ -146,8 +146,8 @@
         <summary>How to update</summary>
         <div class="lifecycle-content">
           <p>
-            Close Gesture Presenter, then ask uv to refresh the GitHub source and upgrade the
-            existing tool. Your selected extras and saved app settings are preserved.
+            Close Gesture Presenter, then let uv fetch and install the latest committed version
+            from GitHub. Your selected extras and saved app settings are preserved.
           </p>
           <div class="lifecycle-command">
             <code>{updateCommand}</code>

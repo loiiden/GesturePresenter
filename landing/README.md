@@ -32,7 +32,7 @@ install `uv`, install the correct application extras, and launch the app. Linux
 commands automatically include the required Qt GUI extra. An uninstall
 disclosure provides the matching `uv tool uninstall gesture-presenter` command
 and explains which local data remains. An update disclosure documents
-`uv tool upgrade gesture-presenter --refresh`, edition changes, forced
+`uv tool upgrade gesture-presenter`, edition changes, forced
 reinstallation, shell-path repair, Linux extras, and unpushed-source behavior.
 
 ## How prebuilt downloads work

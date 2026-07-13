@@ -9,32 +9,29 @@
 <body>
   <main class="shell">
     <header>
-      <div class="brand"><span class="mark">G</span><div><h1>Gesture Presenter</h1><p>Present naturally. Stay in control.</p></div></div>
+      <h1>Gesture Presenter</h1>
       <span id="statusBadge" class="badge"><i></i><span>Ready</span></span>
     </header>
 
     <section class="layout">
       <aside class="settings card">
-        <div class="section-title"><span>Session setup</span><button id="refreshDevices" class="text-button">Refresh devices</button></div>
+        <div class="section-title"><span>Setup</span><button id="refreshDevices" class="text-button">Refresh</button></div>
 
-        <label>Mode<select id="mode"><option value="presentation">Presentation</option></select></label>
-        <label>Camera<select id="camera"></select><small class="field-help">The camera used to recognize your gestures</small></label>
-        <label>Presentation display<select id="display"></select><small class="field-help">The screen where pointer movement will be mapped</small></label>
+        <label>Camera<select id="camera"></select></label>
+        <label>Display<select id="display"></select></label>
 
-        <label id="voiceRow" class="toggle-row"><span><b>Local voice control</b><small id="voiceHint">Whisper runs only when enabled</small></span><input id="voice" type="checkbox"><i></i></label>
+        <label id="voiceRow" class="toggle-row"><span><b>Voice transcription</b><small id="voiceHint">Runs locally with Whisper</small></span><input id="voice" type="checkbox"><i></i></label>
 
         <div class="gesture-help">
-          <h3>Presentation essentials</h3>
-          <p><span>01</span> Point to aim, pinch index to click</p>
-          <p><span>02</span> Pinch middle while pointing to right-click</p>
-          <p><span>03</span> Hold two fingers together and move to scroll</p>
-          <p><span>04</span> Swipe an open palm to change slides</p>
-          <p><span>05</span> Hold a spread V sign for Mission Control</p>
+          <h3>Quick controls</h3>
+          <p>Point to move · pinch to click</p>
+          <p>Two fingers to scroll</p>
+          <p>Open-palm swipe to change slides</p>
         </div>
       </aside>
 
       <section class="stage card">
-        <div id="emptyState" class="empty-state"><div class="camera-icon"></div><h2>Ready when you are</h2><p>Review your setup, then start the presentation session.</p></div>
+        <div id="emptyState" class="empty-state"><div class="camera-icon"></div></div>
         <img id="preview" alt="Live gesture preview">
         <div id="error" class="error" hidden></div>
         <div class="stage-footer"><span id="statusText">Camera is off</span><span class="privacy">● Local processing</span></div>
@@ -42,7 +39,6 @@
     </section>
 
     <footer>
-      <p>Settings are saved automatically on this device.</p>
       <button id="startButton" class="primary" disabled>Loading…</button>
     </footer>
   </main>

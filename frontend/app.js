@@ -6,7 +6,6 @@ let actionInFlight = false;
 
 function values() {
   return {
-    mode: $('mode').value,
     voice_enabled: $('voice').checked,
     camera_index: Number($('camera').value || 0),
     display_index: Number($('display').value || 0),
@@ -37,7 +36,6 @@ function selectKnown(id, value) {
 }
 
 function apply(config) {
-  $('mode').value = config.mode;
   $('voice').checked = config.voice_enabled;
   selectKnown('camera', config.camera_index);
   selectKnown('display', config.display_index);

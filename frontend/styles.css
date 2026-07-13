@@ -33,34 +33,20 @@ button, input, select { font: inherit; }
   padding: 34px 42px 28px;
 }
 
-header, footer, .brand, .layout, .section-title, .toggle-row, .stage-footer {
+header, footer, .layout, .section-title, .toggle-row, .stage-footer {
   display: flex;
   align-items: center;
 }
 
 header { justify-content: space-between; margin-bottom: 28px; }
-.brand { gap: 13px; }
-.mark {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  color: #fff;
-  background: var(--text);
-  border-radius: 12px;
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: -.02em;
-}
 
 h1 {
-  margin: 0 0 2px;
+  margin: 0;
   font-size: 20px;
   font-weight: 650;
   letter-spacing: -.025em;
 }
 
-header p { margin: 0; color: var(--secondary); font-size: 12px; }
 .badge {
   padding: 7px 12px;
   color: var(--secondary);
@@ -120,8 +106,6 @@ select:focus, input[type="number"]:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(0, 113, 227, .12);
 }
-.field-help { display: block; margin-top: 5px; color: var(--tertiary); font-size: 9px; font-weight: 400; }
-
 .toggle-row {
   justify-content: space-between;
   margin: 0;
@@ -173,13 +157,6 @@ select:focus, input[type="number"]:focus {
   text-transform: uppercase;
 }
 .gesture-help p { margin: 8px 0; color: #3a3a3c; font-size: 11px; }
-.gesture-help span {
-  display: inline-block;
-  width: 27px;
-  color: var(--tertiary);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
 
 .stage {
   position: relative;
@@ -197,8 +174,6 @@ select:focus, input[type="number"]:focus {
   justify-content: center;
   text-align: center;
 }
-.empty-state h2 { margin: 20px 0 6px; font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
-.empty-state p { margin: 0; color: var(--secondary); font-size: 12px; }
 .camera-icon {
   position: relative;
   width: 66px;
@@ -242,8 +217,7 @@ select:focus, input[type="number"]:focus {
   font-size: 11px;
 }
 
-footer { justify-content: space-between; margin-top: 18px; }
-footer p { color: var(--tertiary); font-size: 10px; }
+footer { justify-content: flex-end; margin-top: 18px; }
 .primary {
   min-width: 165px;
   padding: 12px 20px;
