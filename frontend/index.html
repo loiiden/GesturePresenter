@@ -22,12 +22,10 @@
 
         <label id="voiceRow" class="toggle-row"><span><b>Voice transcription</b><small id="voiceHint">Runs locally with Whisper</small></span><input id="voice" type="checkbox"><i></i></label>
 
-        <div class="gesture-help">
-          <h3>Quick controls</h3>
-          <p>Point to move · pinch to click</p>
-          <p>Two fingers to scroll</p>
-          <p>Open-palm swipe to change slides</p>
-        </div>
+        <button id="gestureGuideButton" class="gesture-guide-button" type="button">
+          <span><b>Gesture guide</b><small>Right and left hand controls</small></span>
+          <em>View all</em>
+        </button>
       </aside>
 
       <section class="stage card">
@@ -42,6 +40,41 @@
       <button id="startButton" class="primary" disabled>Loading…</button>
     </footer>
   </main>
+
+  <div id="gestureModal" class="gesture-modal" hidden>
+    <section class="gesture-panel" role="dialog" aria-modal="true" aria-labelledby="gestureTitle">
+      <div class="guide-head">
+        <div><h2 id="gestureTitle">Gesture guide</h2><p>Hold deliberate poses briefly to avoid accidental actions.</p></div>
+        <button id="gestureGuideClose" type="button" aria-label="Close gesture guide">×</button>
+      </div>
+
+      <div class="gesture-groups">
+        <div class="gesture-group">
+          <h3><span>Right</span> Presentation controls</h3>
+          <dl>
+            <div><dt>Point index finger</dt><dd>Move the pointer</dd></div>
+            <div><dt>Pinch thumb + index</dt><dd>Left click on release</dd></div>
+            <div><dt>Pinch thumb + middle</dt><dd>Right click</dd></div>
+            <div><dt>Two fingers together</dt><dd>Move up or down to scroll</dd></div>
+            <div><dt>Open-palm swipe</dt><dd>Change slide</dd></div>
+            <div><dt>Hold a fist</dt><dd>Toggle black screen</dd></div>
+            <div><dt>Thumb up</dt><dd>Play or pause media</dd></div>
+            <div><dt>Hold a V sign</dt><dd>Open task overview</dd></div>
+          </dl>
+        </div>
+
+        <div class="gesture-group left-hand">
+          <h3><span>Left</span> Safety and voice</h3>
+          <dl>
+            <div><dt>Hold an open palm</dt><dd>Lock or unlock gesture controls</dd></div>
+            <div><dt>Hold a fist and speak</dt><dd>Release to transcribe and paste</dd></div>
+          </dl>
+          <p class="voice-note">Voice requires the optional voice edition.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

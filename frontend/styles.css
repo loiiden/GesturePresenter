@@ -24,6 +24,7 @@ body {
     "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+body.modal-open { overflow: hidden; }
 
 button, input, select { font: inherit; }
 
@@ -141,22 +142,123 @@ select:focus, input[type="number"]:focus {
 .toggle-row input:checked + i::after { transform: translateX(15px); }
 .toggle-row.disabled { opacity: .45; pointer-events: none; }
 
-.gesture-help {
+.gesture-guide-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   margin-top: 14px;
   padding: 15px;
   background: var(--surface-soft);
   border: 1px solid #eeeeef;
   border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, background .15s;
 }
-.gesture-help h3 {
+.gesture-guide-button:hover { background: #f3f3f5; border-color: #d9d9dc; }
+.gesture-guide-button span { display: flex; flex-direction: column; gap: 4px; }
+.gesture-guide-button b { font-size: 12px; font-weight: 600; }
+.gesture-guide-button small { color: var(--tertiary); font-size: 9px; }
+.gesture-guide-button em {
+  color: var(--blue);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 550;
+}
+
+.gesture-modal[hidden] { display: none; }
+.gesture-modal {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(20, 20, 22, .42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.gesture-panel {
+  width: min(780px, 100%);
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  padding: 28px;
+  background: var(--surface);
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .22);
+}
+.guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.guide-head h2 { margin: 0; font-size: 22px; letter-spacing: -.025em; }
+.guide-head p { margin: 6px 0 0; color: var(--secondary); font-size: 11px; }
+.guide-head button {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0 0 2px;
+  color: var(--secondary);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+.guide-head button:hover { color: var(--text); background: #eeeeef; }
+.gesture-groups {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 28px;
+  padding-top: 22px;
+}
+.gesture-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 10px;
-  color: var(--tertiary);
-  font-size: 9px;
+  color: var(--secondary);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: .08em;
-  text-transform: uppercase;
 }
-.gesture-help p { margin: 8px 0; color: #3a3a3c; font-size: 11px; }
+.gesture-group h3 span {
+  padding: 4px 8px;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.gesture-group dl { margin: 0; }
+.gesture-group dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .9fr);
+  gap: 14px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.gesture-group dt { color: var(--text); font-size: 11px; font-weight: 570; }
+.gesture-group dd { margin: 0; color: var(--secondary); font-size: 11px; line-height: 1.35; }
+.left-hand dl > div { grid-template-columns: 1fr; gap: 4px; }
+.voice-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  color: var(--secondary);
+  background: var(--surface-soft);
+  border-radius: 9px;
+  font-size: 9px;
+  line-height: 1.4;
+}
 
 .stage {
   position: relative;
@@ -234,3 +336,8 @@ footer { justify-content: flex-end; margin-top: 18px; }
 .primary:active { transform: scale(.985); }
 .primary:disabled { opacity: .55; cursor: wait; }
 .primary.stop { background: var(--red); }
+
+@media (max-width: 900px) {
+  .gesture-groups { grid-template-columns: 1fr; }
+  .left-hand dl > div { grid-template-columns: minmax(0, 1fr) minmax(0, .9fr); gap: 14px; }
+}

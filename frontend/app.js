@@ -47,6 +47,21 @@ function showError(message) {
   $('statusText').textContent = 'Unable to continue';
 }
 
+function openGestureGuide() {
+  $('gestureModal').hidden = false;
+  document.querySelector('.shell').inert = true;
+  document.body.classList.add('modal-open');
+  $('gestureGuideClose').focus();
+}
+
+function closeGestureGuide() {
+  if ($('gestureModal').hidden) return;
+  $('gestureModal').hidden = true;
+  document.querySelector('.shell').inert = false;
+  document.body.classList.remove('modal-open');
+  $('gestureGuideButton').focus();
+}
+
 function setPhase(value) {
   phase = value || 'idle';
   $('statusBadge').classList.toggle('running', phase === 'running');
@@ -118,6 +133,14 @@ function bindControls() {
   // Bind the primary action before any potentially slow device or config calls.
   $('startButton').addEventListener('click', handleStart);
   $('refreshDevices').addEventListener('click', () => refreshDevices());
+  $('gestureGuideButton').addEventListener('click', openGestureGuide);
+  $('gestureGuideClose').addEventListener('click', closeGestureGuide);
+  $('gestureModal').addEventListener('click', event => {
+    if (event.target === $('gestureModal')) closeGestureGuide();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeGestureGuide();
+  });
   document.querySelectorAll('select,input').forEach(element => {
     element.addEventListener('change', async () => {
       if (!initialized) return;
