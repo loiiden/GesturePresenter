@@ -21,3 +21,6 @@ build/
 dist/
 *.dmg
 *.AppImage
+
+# Local presenter cheat sheet (not part of the repository)
+codebase.md
