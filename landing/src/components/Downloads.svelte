@@ -34,6 +34,8 @@
   });
 
   const appCommand = $derived(`uv tool install ${packageSpec}`);
+  const forceInstallCommand = $derived(`uv tool install --force ${packageSpec}`);
+  const updateCommand = 'uv tool upgrade gesture-presenter --refresh';
 
   async function copyCommand(value, key) {
     try {
@@ -140,14 +142,46 @@
         </div>
       {/if}
 
-      <details class="uninstall">
+      <details class="lifecycle">
+        <summary>How to update</summary>
+        <div class="lifecycle-content">
+          <p>
+            Close Gesture Presenter, then ask uv to refresh the GitHub source and upgrade the
+            existing tool. Your selected extras and saved app settings are preserved.
+          </p>
+          <div class="lifecycle-command">
+            <code>{updateCommand}</code>
+            <button type="button" onclick={() => copyCommand(updateCommand, 'update')}
+              aria-label="Copy update command">{copied === 'update' ? 'Copied' : 'Copy'}</button>
+          </div>
+
+          <div class="edge-cases">
+            <b>If updating does not work</b>
+            <ul>
+              <li><strong>Switching editions:</strong> select Gestures or Gestures + voice above, then run the force-install command below.</li>
+              <li><strong>Broken environment:</strong> run <code>uv tool upgrade gesture-presenter --reinstall</code>.</li>
+              <li><strong>Command not found:</strong> restart the terminal. If needed, run <code>uv tool update-shell</code> and restart it again.</li>
+              <li><strong>Linux:</strong> keep the generated <code>gui-qt</code> extra; the plain macOS/Windows command is not sufficient.</li>
+              <li><strong>No visible update:</strong> only committed code from the GitHub default branch can be installed. Local or unpushed changes are unavailable.</li>
+            </ul>
+          </div>
+
+          <div class="lifecycle-command secondary-command">
+            <span><small>Force reinstall selected edition</small><code>{forceInstallCommand}</code></span>
+            <button type="button" onclick={() => copyCommand(forceInstallCommand, 'force')}
+              aria-label="Copy force reinstall command">{copied === 'force' ? 'Copied' : 'Copy'}</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="lifecycle">
         <summary>How to uninstall</summary>
-        <div class="uninstall-content">
+        <div class="lifecycle-content">
           <p>
             Remove Gesture Presenter and its isolated dependencies with one command.
             Saved app settings and downloaded model caches are not removed automatically.
           </p>
-          <div class="uninstall-command">
+          <div class="lifecycle-command">
             <code>uv tool uninstall gesture-presenter</code>
             <button type="button" onclick={() => copyCommand('uv tool uninstall gesture-presenter', 'uninstall')}
               aria-label="Copy uninstall command">{copied === 'uninstall' ? 'Copied' : 'Copy'}</button>
@@ -355,12 +389,13 @@
     line-height: 1.5;
   }
   .platform-note b { color: var(--ink); margin-right: 5px; }
-  .uninstall {
+  .lifecycle {
     margin-top: 14px;
     border-top: 1px solid var(--line);
     color: var(--ink-soft);
   }
-  .uninstall summary {
+  .lifecycle + .lifecycle { margin-top: 0; }
+  .lifecycle summary {
     width: fit-content;
     padding-top: 16px;
     color: var(--ink);
@@ -368,15 +403,15 @@
     font-size: 12.5px;
     font-weight: 600;
   }
-  .uninstall-content {
+  .lifecycle-content {
     padding-top: 12px;
   }
-  .uninstall-content > p {
+  .lifecycle-content > p {
     max-width: 680px;
     font-size: 12.5px;
     line-height: 1.5;
   }
-  .uninstall-command {
+  .lifecycle-command {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -386,8 +421,9 @@
     border-radius: 11px;
     background: #171719;
   }
-  .uninstall-command code { padding: 4px 0; }
-  .uninstall-command button {
+  .lifecycle-command code { padding: 4px 0; }
+  .lifecycle-command > code, .lifecycle-command > span { min-width: 0; }
+  .lifecycle-command button {
     flex: 0 0 64px;
     height: 34px;
     border: 1px solid #444448;
@@ -397,7 +433,34 @@
     cursor: pointer;
     font-size: 11px;
   }
-  .uninstall-command button:hover { background: #353539; }
+  .lifecycle-command button:hover { background: #353539; }
+  .secondary-command > span { min-width: 0; }
+  .secondary-command span code { display: block; }
+  .secondary-command small {
+    display: block;
+    margin-bottom: 3px;
+    color: #8e8e93;
+    font-size: 10px;
+  }
+  .edge-cases {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 11px;
+    background: var(--bg-soft);
+    color: var(--ink-soft);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .edge-cases > b { color: var(--ink); }
+  .edge-cases ul { margin: 8px 0 0; padding-left: 19px; }
+  .edge-cases li + li { margin-top: 5px; }
+  .edge-cases strong { color: var(--ink); }
+  .edge-cases code {
+    padding: 0;
+    color: #365c31;
+    font-size: 11px;
+    white-space: normal;
+  }
   .builds {
     margin-top: 34px;
     padding: 26px;
