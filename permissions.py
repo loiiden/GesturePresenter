@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import platform
 import threading
+import time
 
 
 def request_camera_permission() -> tuple[bool, str | None]:
@@ -61,12 +62,24 @@ def request_accessibility_permission() -> tuple[bool, str | None]:
     if ApplicationServices.AXIsProcessTrusted():
         return True, None
 
-    ApplicationServices.AXIsProcessTrustedWithOptions({
+    trusted = ApplicationServices.AXIsProcessTrustedWithOptions({
         ApplicationServices.kAXTrustedCheckOptionPrompt: True,
     })
+    if trusted:
+        return True, None
+
+    # The macOS prompt sends the user to System Settings. Permission can become
+    # active while this process is still running, so keep the original Start
+    # request alive instead of requiring repeated button clicks.
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        if ApplicationServices.AXIsProcessTrusted():
+            return True, None
+        time.sleep(0.25)
+
     return False, (
         "Gesture Presenter is not trusted to control the keyboard and pointer. "
         "Remove any older Gesture Presenter entry in System Settings → Privacy & "
         "Security → Accessibility, add the current app from Applications, enable "
-        "it, then click Start again."
+        "it, then return to Gesture Presenter and click Start again."
     )

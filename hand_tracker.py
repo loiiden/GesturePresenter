@@ -292,8 +292,9 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             if not ok:
                 break
 
-            if app_config.mirror_camera:
-                frame = cv2.flip(frame, 1)
+            # Always use a natural, selfie-style preview. Gesture handedness and
+            # pointer movement are defined against this mirrored coordinate space.
+            frame = cv2.flip(frame, 1)
             rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
@@ -306,10 +307,8 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             right_lms = left_lms = None
             for i, hand_lms in enumerate(result.hand_landmarks):
                 label = result.handedness[i][0].category_name
-                # Handedness labels reverse when the image is mirrored.
-                controls_right_hand = (
-                    label == "Left" if app_config.mirror_camera else label == "Right"
-                )
+                # MediaPipe handedness labels reverse in the mirrored frame.
+                controls_right_hand = label == "Left"
                 if controls_right_hand:
                     right_lms = hand_lms
                 else:

@@ -27,7 +27,6 @@ class AppConfig:
     voice_enabled: bool = False
     camera_index: int = 0
     display_index: int = 0
-    mirror_camera: bool = True
 
     @classmethod
     def load(cls) -> "AppConfig":

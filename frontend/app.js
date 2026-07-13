@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 let initialized = false;
 let phase = 'idle';
 let pollInFlight = false;
+let actionInFlight = false;
 
 function values() {
   return {
@@ -9,7 +10,6 @@ function values() {
     voice_enabled: $('voice').checked,
     camera_index: Number($('camera').value || 0),
     display_index: Number($('display').value || 0),
-    mirror_camera: $('mirror').checked,
   };
 }
 
@@ -41,7 +41,6 @@ function apply(config) {
   $('voice').checked = config.voice_enabled;
   selectKnown('camera', config.camera_index);
   selectKnown('display', config.display_index);
-  $('mirror').checked = config.mirror_camera;
 }
 
 function showError(message) {
@@ -61,24 +60,26 @@ function setPhase(value) {
   };
   $('startButton').textContent = labels[phase] || labels.idle;
   $('startButton').classList.toggle('stop', phase === 'running' || phase === 'starting');
-  $('startButton').disabled = phase === 'stopping';
+  $('startButton').disabled = actionInFlight || phase === 'stopping';
   $('statusBadge').querySelector('span').textContent =
     phase === 'running' ? 'Live' : phase === 'starting' ? 'Starting' : phase === 'stopping' ? 'Stopping' : 'Ready';
 }
 
 function setEngineReady(ready) {
   if (phase !== 'idle') return;
-  $('startButton').disabled = !ready;
+  $('startButton').disabled = actionInFlight || !ready;
   $('startButton').textContent = ready ? 'Start presentation' : 'Preparing engine…';
   if (!ready) $('statusText').textContent = 'Preparing gesture recognition…';
 }
 
 async function handleStart() {
+  if (actionInFlight) return;
   if (!initialized) {
     showError('The application is still loading. Please wait a moment.');
     return;
   }
   $('error').hidden = true;
+  actionInFlight = true;
   $('startButton').disabled = true;
   try {
     if (phase !== 'idle') {
@@ -87,14 +88,18 @@ async function handleStart() {
     } else {
       $('statusText').textContent = 'Requesting camera access…';
       const result = await window.pywebview.api.start_tracking(values());
-      if (!result.ok) showError(result.error || 'Unable to start tracking.');
+      if (!result.ok) {
+        setPhase(result.phase || 'idle');
+        showError(result.error || 'Unable to start tracking.');
+      }
       else setPhase(result.phase);
     }
   } catch (error) {
     showError(`Unable to start: ${error.message || error}`);
   } finally {
+    actionInFlight = false;
     // Stopping remains locked until the backend confirms the camera thread has
-    // exited. Starting stays clickable so it can be cancelled deliberately.
+    // exited. A completed startup can be cancelled while the camera opens.
     $('startButton').disabled = phase === 'stopping';
   }
 }
@@ -167,11 +172,16 @@ async function poll() {
   pollInFlight = true;
   try {
     const state = await window.pywebview.api.poll();
-    setPhase(state.phase);
-    setEngineReady(state.engineReady);
-    if (state.engineError) showError(state.engineError);
-    $('statusText').textContent = state.message;
-    if (state.error) showError(state.error);
+    // A queued macOS bridge call may not have entered Python yet. Do not let an
+    // older idle poll overwrite the disabled button and "Requesting…" feedback.
+    const waitingForStart = actionInFlight && phase === 'idle' && state.phase === 'idle';
+    if (!waitingForStart) {
+      setPhase(state.phase);
+      setEngineReady(state.engineReady);
+      if (state.engineError) showError(state.engineError);
+      $('statusText').textContent = state.message;
+      if (state.error) showError(state.error);
+    }
     if (state.frame) {
       $('preview').src = state.frame;
       $('preview').style.display = 'block';

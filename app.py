@@ -77,44 +77,62 @@ class AppApi:
         return asdict(self.config)
 
     def start_tracking(self, values: dict) -> dict:
+        # Keep the complete startup transaction serialized. macOS permission
+        # checks may block while a system prompt is open; without this lock,
+        # repeated WebView calls can pass the idle check and start concurrently.
         with self.lifecycle_lock:
             if self.phase in ("starting", "running"):
                 return {"ok": True, "phase": self.phase}
             if self.phase == "stopping":
                 return {"ok": False, "phase": self.phase,
                         "error": "Tracking is still stopping. Please wait."}
-        if self.engine_error:
-            return {"ok": False, "error": self.engine_error}
-        if not self.engine_ready.is_set():
-            return {"ok": False, "error": "The tracking engine is still preparing. Please try again shortly."}
-        try:
-            self.save_config(values)
-        except Exception as exc:
-            self.error = f"Could not save settings: {exc}"
-            return {"ok": False, "error": self.error}
-        allowed, permission_error = request_camera_permission()
-        if not allowed:
-            self.error = permission_error
-            self.message = "Camera permission required"
-            return {"ok": False, "error": permission_error}
-        allowed, permission_error = request_accessibility_permission()
-        if not allowed:
-            self.error = permission_error
-            self.message = "Accessibility permission required"
-            return {"ok": False, "error": permission_error}
-        self.stop_event = threading.Event()
-        self.ui_queue = queue.Queue(maxsize=3)
-        self.frame = None
-        self.error = None
-        self.worker = threading.Thread(
-            target=_tracking_worker,
-            args=(self.config, self.stop_event, self.ui_queue),
-            daemon=True,
-        )
-        self.phase = "starting"
-        self.worker.start()
-        self.message = "Starting camera…"
-        return {"ok": True, "phase": self.phase}
+            if self.engine_error:
+                return self._start_failure(self.engine_error)
+            if not self.engine_ready.is_set():
+                return self._start_failure(
+                    "The tracking engine is still preparing. Please try again shortly."
+                )
+
+            # Publish startup before potentially slow macOS permission calls so
+            # polling cannot incorrectly restore the UI to idle.
+            self.phase = "starting"
+            self.message = "Checking camera and input-control permissions…"
+            self.error = None
+            try:
+                self.save_config(values)
+            except Exception as exc:
+                return self._start_failure(f"Could not save settings: {exc}")
+
+            allowed, permission_error = request_camera_permission()
+            if not allowed:
+                return self._start_failure(
+                    permission_error or "Camera permission is required.",
+                    "Camera permission required",
+                )
+            allowed, permission_error = request_accessibility_permission()
+            if not allowed:
+                return self._start_failure(
+                    permission_error or "Input-control permission is required.",
+                    "Accessibility permission required",
+                )
+
+            self.stop_event = threading.Event()
+            self.ui_queue = queue.Queue(maxsize=3)
+            self.frame = None
+            self.worker = threading.Thread(
+                target=_tracking_worker,
+                args=(self.config, self.stop_event, self.ui_queue),
+                daemon=True,
+            )
+            self.worker.start()
+            self.message = "Starting camera…"
+            return {"ok": True, "phase": self.phase}
+
+    def _start_failure(self, error: str, message: str | None = None) -> dict:
+        self.phase = "idle"
+        self.error = error
+        self.message = message or "Unable to start"
+        return {"ok": False, "phase": self.phase, "error": error}
 
     def stop_tracking(self) -> dict:
         with self.lifecycle_lock:
