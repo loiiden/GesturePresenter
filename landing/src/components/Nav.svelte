@@ -11,7 +11,7 @@
     <div class="links">
       <a href="#gestures">Gestures</a>
       <a href="#how">How it works</a>
-      <a href="#download">Download</a>
+      <a href="#download">Install</a>
       <a class="ghub" href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
     </div>
   </div>

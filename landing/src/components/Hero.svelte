@@ -1,11 +1,11 @@
 <script>
   import { platforms, REPO } from '../lib/content.js';
-  import { urlFor, release } from '../lib/downloads.svelte.js';
+  import { release } from '../lib/downloads.svelte.js';
   import PlatformIcon from './PlatformIcon.svelte';
 
   let { os } = $props();
 
-  // If we recognised the OS, point the primary button straight at its build.
+  // If we recognised the OS, describe the guided installer for that platform.
   const primary = $derived(platforms.find((p) => p.id === os));
 </script>
 
@@ -21,13 +21,13 @@
 
   <div class="cta">
     {#if primary}
-      <a class="btn btn-dark" href={urlFor(primary.id)}>
+      <a class="btn btn-dark" href="#download">
         <PlatformIcon id={primary.id} size={18} />
-        Download for {primary.name}
+        Install for {primary.name}
       </a>
-      <a class="btn btn-ghost" href="#download">All platforms</a>
+      <a class="btn btn-ghost" href="#download">Choose edition</a>
     {:else}
-      <a class="btn btn-dark" href="#download">Download</a>
+      <a class="btn btn-dark" href="#download">Install</a>
       <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer">View source</a>
     {/if}
   </div>
