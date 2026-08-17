@@ -25,16 +25,21 @@ uv sync --extra research
 # 1. Verify the whole pipeline without a camera (~20 s)
 uv run --extra research python -m research.selftest
 
-# 2. Record three sessions, changing position and lighting between them
+# 2. Record three sessions, changing lighting/position between them.
+#    The recorder enforces each distance block itself — just follow the on-screen
+#    arrow until it turns green; it starts recording on its own.
 uv run --extra research python -m research.recorder --participant P001 --session S01
 uv run --extra research python -m research.recorder --participant P001 --session S02
 uv run --extra research python -m research.recorder --participant P001 --session S03
 
-# 3. Train, holding out the last session entirely
+# 3. Confirm the recording actually varied (exits non-zero if it did not)
+uv run --extra research python -m research.inspect research/data/gestures.csv
+
+# 4. Train, holding out the last session entirely
 uv run --extra research python -m research.train research/data/gestures.csv \
     --holdout-session S03 --baselines
 
-# 4. The app now picks the model up automatically
+# 5. The app now picks the model up automatically
 uv run gesture-presenter
 ```
 
@@ -48,15 +53,34 @@ Keyboard: `Space` pause/resume, `R` retake, `S` skip.
 **Condition blocking.** Trials are grouped into blocks — normal, near, far,
 tilted, off-centre, then the left-hand block — and shuffled only *within* a
 block. Fully randomising would ask you to move nearer and further every three
-seconds, which is not physically practical and silently mislabels the distance
-conditions.
+seconds, which is not physically practical.
+
+**The position gate enforces each block; it does not ask you to read anything.**
+At a block boundary the recorder shows one glyph, one verb (`MOVE CLOSER`,
+`MOVE BACK`, `MOVE TO A CORNER`) and a meter showing where you are relative to
+where you need to be. It starts by itself once you hold the right position for
+0.8 s. Frames outside the band are not counted as usable, so a `near` trial
+cannot be recorded from your normal distance — after two failed trials the
+full-screen cue returns. `Skip position check` overrides it if your camera
+genuinely cannot reach a target.
+
+Distance targets are **ratios of your own normal-distance span**, measured from
+the first block, not absolute numbers: a fixed span is trivial on a wide-angle
+webcam and unreachable on a narrow one. `near` means ≥1.4x your baseline, `far`
+means ≤0.72x, which guarantees the two separate whatever camera you use.
+
+This exists because session S01 was recorded without it and was unusable: every
+per-frame quality measure passed (99% median detection confidence, full-length
+trials, 193/194 saved) while near, far and offcentre came out statistically
+identical to normal — a near/far span ratio of 0.98x where anything above 1.5x
+was needed. A prompt that can be ignored will be.
 
 **Quality gating.** Every frame is checked for detection confidence, clipping at
-the frame edge, and apparent hand size. A trial that yields fewer than 12 good
-frames is rejected with the reason shown and re-queued rather than being written.
-Thin or mistracked trials are exactly what poisons a small dataset. You can also
-delete any recent trial from the side panel; deletion is always by whole trial,
-never by frame, so a partially removed trial cannot leave a biased remainder.
+the frame edge, apparent hand size, and the active block's position target. A
+trial yielding fewer than 12 good frames is rejected with the reason shown and
+re-queued rather than written. You can also delete any recent trial from the
+side panel; deletion is always by whole trial, never by frame, so a partially
+removed trial cannot leave a biased remainder.
 
 **Privacy.** No video is written. Only landmark coordinates leave the camera
 loop. `research/data/` is gitignored.

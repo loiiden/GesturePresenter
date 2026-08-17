@@ -13,6 +13,17 @@ const PHASE_LABELS = {
   block_intro: 'MOVE INTO POSITION',
 };
 
+// Wordless cues. The operator is holding a hand up in front of the camera and
+// will not read a paragraph, so each state is one glyph plus one verb.
+const CUES = {
+  closer: {glyph: '⊕', word: 'MOVE CLOSER'},
+  back:   {glyph: '⊖', word: 'MOVE BACK'},
+  edge:   {glyph: '⤡', word: 'MOVE TO A CORNER'},
+  center: {glyph: '⊙', word: 'MOVE TO THE CENTRE'},
+  none:   {glyph: '✋', word: 'SHOW YOUR HAND'},
+  ok:     {glyph: '✓', word: 'HOLD IT'},
+};
+
 function renderBlockIntro(state) {
   const panel = $('blockIntro');
   const block = state.block;
@@ -20,26 +31,36 @@ function renderBlockIntro(state) {
   panel.hidden = !show;
   if (!show) return;
 
-  $('blockLabel').textContent = `${block.label}${block.hand === 'Left' ? ' — LEFT hand' : ''}`;
-  $('blockInstruction').textContent = block.instruction;
-  $('blockTrials').textContent = `${block.trials} trials in this block`;
-
-  // The live readout is the point: it turns "move closer" into something the
-  // operator can watch converge instead of estimating by eye.
-  const target = $('blockTarget');
   const q = state.quality;
-  let text = '', now = '';
-  if (block.targetMarginMax != null) {
-    text = `margin target ≤ ${block.targetMarginMax}`;
-    now = `now ${q.margin ? q.margin.toFixed(2) : '—'}`;
-  } else if (block.targetSpan) {
-    text = `span target ${block.targetSpan[0]}–${block.targetSpan[1]}`;
-    now = `now ${q.span ? q.span.toFixed(2) : '—'}`;
+  const key = block.inTarget ? 'ok' : (q.cue || (q.reason ? 'none' : 'none'));
+  const cue = CUES[key] || CUES.none;
+
+  const glyph = $('cueGlyph');
+  glyph.textContent = cue.glyph;
+  glyph.className = `cue-glyph ${block.inTarget ? 'ok' : key}`;
+  const word = $('cueWord');
+  word.textContent = block.hand === 'Left' && !block.inTarget
+    ? `${cue.word} — LEFT HAND` : cue.word;
+  word.classList.toggle('ok', !!block.inTarget);
+
+  // Meter: where the current span sits relative to the required band.
+  const meter = $('meterBand'), mark = $('meterMark');
+  const band = block.targetSpan;
+  if (band) {
+    const scale = band[1] * 1.35;
+    meter.style.display = '';
+    meter.style.left = `${(band[0] / scale) * 100}%`;
+    meter.style.width = `${((band[1] - band[0]) / scale) * 100}%`;
+    mark.style.left = `${Math.min(99, (q.span / scale) * 100)}%`;
+  } else {
+    meter.style.display = 'none';
+    mark.style.left = `${Math.min(99, q.span * 120)}%`;
   }
-  target.hidden = !text;
-  $('targetText').textContent = text;
-  $('targetNow').textContent = now;
-  target.classList.toggle('hit', !!block.inTarget);
+
+  const hold = $('holdRing');
+  hold.classList.toggle('active', !!block.inTarget);
+  $('holdFill').style.setProperty('--hold', `${(block.holdProgress || 0) * 100}%`);
+  $('blockTrials').textContent = `${block.label} · ${block.trials} trials`;
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -196,7 +217,8 @@ async function poll() {
 function syncButtons(state) {
   const active = cameraOn && state.phase !== 'done';
   $('runToggle').disabled = !active;
-  $('runToggle').textContent = state.phase === 'block_intro' ? 'Start this block'
+  $('runToggle').textContent = state.phase === 'block_intro'
+    ? (state.paused ? 'Begin recording' : 'Waiting for position…')
     : running ? 'Pause' : 'Begin recording';
   $('runToggle').classList.toggle('running', running);
   $('redo').disabled = !active;
@@ -264,7 +286,7 @@ function bind() {
   });
   $('runToggle').addEventListener('click', () =>
     window.pywebview.api.command(running ? 'pause' : 'resume'));
-  $('blockStart').addEventListener('click', () => window.pywebview.api.command('resume'));
+  $('blockStart').addEventListener('click', () => window.pywebview.api.command('skip_gate'));
   $('redo').addEventListener('click', () => window.pywebview.api.command('redo'));
   $('skip').addEventListener('click', () => window.pywebview.api.command('skip'));
   $('deleteLast').addEventListener('click', () => window.pywebview.api.command('delete_last'));

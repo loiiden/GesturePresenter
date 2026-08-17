@@ -50,15 +50,15 @@
           <!-- Block briefing: a hard stop whenever the physical setup must
                change, so a new condition cannot slip past unnoticed. -->
           <div id="blockIntro" class="block-intro" hidden>
-            <span class="block-kicker">Next block</span>
-            <h3 id="blockLabel">Normal</h3>
-            <p id="blockInstruction"></p>
-            <div id="blockTarget" class="block-target">
-              <span class="target-text" id="targetText"></span>
-              <span class="target-now" id="targetNow">—</span>
+            <div id="cueGlyph" class="cue-glyph">→</div>
+            <h3 id="cueWord">MOVE CLOSER</h3>
+            <div class="span-meter">
+              <div id="meterBand" class="meter-band"></div>
+              <div id="meterMark" class="meter-mark"></div>
             </div>
+            <div id="holdRing" class="hold-ring"><i id="holdFill"></i><span>hold</span></div>
             <p id="blockTrials" class="block-trials"></p>
-            <button id="blockStart" class="primary big">Start this block</button>
+            <button id="blockStart" class="ghost small">Skip position check</button>
           </div>
         </div>
 

@@ -44,53 +44,41 @@
     {
       "id": "normal",
       "label": "Normal",
-      "instruction": "Sit at your usual presenting distance, hand at chest height, centred in the frame.",
-      "repetitions": 5,
-      "target_span": [
-        0.28,
-        0.46
-      ]
+      "instruction": "Sit at your usual presenting distance.",
+      "repetitions": 5
     },
     {
       "id": "near",
       "label": "Close to camera",
-      "instruction": "Move clearly closer - the hand should fill much more of the frame. Watch the span readout and get it above 0.52 before starting.",
+      "instruction": "Move closer.",
       "repetitions": 3,
-      "target_span": [
-        0.52,
-        0.9
+      "span_ratio": [
+        1.4,
+        3.0
       ]
     },
     {
       "id": "far",
       "label": "Far from camera",
-      "instruction": "Lean back or step away so the hand looks small. Watch the span readout and get it below 0.26 before starting.",
+      "instruction": "Move back.",
       "repetitions": 3,
-      "target_span": [
-        0.12,
-        0.26
+      "span_ratio": [
+        0.35,
+        0.72
       ]
     },
     {
       "id": "tilted",
       "label": "Rotated hand",
-      "instruction": "Hold the same pose but rotate the wrist - tilt left, right, and angle the palm away from the camera. Change the tilt every repetition.",
-      "repetitions": 3,
-      "target_span": [
-        0.26,
-        0.46
-      ]
+      "instruction": "Rotate your wrist. Change the tilt each time.",
+      "repetitions": 3
     },
     {
       "id": "offcentre",
       "label": "Off-centre",
-      "instruction": "Hold the pose near an edge or corner, not the middle. Watch the margin readout and get it below 0.07 before starting.",
+      "instruction": "Move your hand to a corner of the frame.",
       "repetitions": 2,
-      "target_span": [
-        0.22,
-        0.46
-      ],
-      "target_margin_max": 0.07
+      "target_margin_max": 0.1
     }
   ],
   "left_hand": {
@@ -120,5 +108,9 @@
     "min_hand_span": 0.07,
     "max_hand_span": 0.9,
     "min_frames": 12
+  },
+  "gate": {
+    "hold_seconds": 0.8,
+    "_note": "A block starts only after the measured position stays inside its target band for this long. Targets are ratios of the operator's own normal-distance span, calibrated from the first block, because absolute spans are not reachable on every camera."
   }
 }

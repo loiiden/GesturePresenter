@@ -66,6 +66,15 @@ def main(argv=None) -> int:
     trials = len({row["trial_id"] for row in rows})
     print(f"{len(rows)} frames / {trials} trials / sessions {', '.join(sessions)}\n")
 
+    # Distance targets are ratios of the operator's own normal-block span, so
+    # they must be resolved against this dataset rather than read as constants.
+    normal = [v for (_, c), v in spans.items() if c == "normal"]
+    baseline = st.median(normal) if normal else None
+    if baseline:
+        print(f"normal-distance baseline span: {baseline:.3f}\n")
+    else:
+        print("No normal-condition trials: distance targets cannot be checked.\n")
+
     print(f"{'condition':<11}{'n':>4}  {'span q1/med/q3':<24}{'target':<14}"
           f"{'min margin':>11}  verdict")
     failures = []
@@ -74,7 +83,9 @@ def main(argv=None) -> int:
         if not values:
             continue
         q1, q2, q3 = _quartiles(values)
-        target = condition.get("target_span")
+        ratio = condition.get("span_ratio")
+        target = ([ratio[0] * baseline, ratio[1] * baseline]
+                  if ratio and baseline else None)
         margin_values = [v for (_, c), v in margins.items() if c == name]
         margin_target = condition.get("target_margin_max")
 

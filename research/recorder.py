@@ -30,6 +30,7 @@ import base64
 import json
 import queue
 import random
+import statistics
 import sys
 import threading
 import time
@@ -75,6 +76,8 @@ class FrameQuality:
     span: float = 0.0
     margin: float = 0.0
     score: float = 0.0
+    #: Wordless instruction for the UI: "closer", "back", "edge", "center".
+    cue: str = ""
 
 
 def build_plan(protocol: dict, seed: int | None) -> list[Trial]:
@@ -112,19 +115,40 @@ def build_plan(protocol: dict, seed: int | None) -> list[Trial]:
     return trials
 
 
-def assess(landmarks, score: float, quality: dict) -> FrameQuality:
+def assess(landmarks, score: float, quality: dict, target: dict | None = None) -> FrameQuality:
+    """Judge one frame, optionally against the active block's position target.
+
+    ``target`` carries the condition's required placement. Frames outside it are
+    rejected like any other bad frame, which is what makes a block's condition
+    enforced rather than merely suggested: a "near" trial cannot accumulate
+    enough good frames unless the hand really is near.
+    """
     points = np.array([[lm.x, lm.y] for lm in landmarks], dtype=np.float64)
     lo, hi = points.min(axis=0), points.max(axis=0)
     span = float(np.hypot(*(hi - lo)))
     margin = float(min(lo.min(), (1.0 - hi).min()))
+
+    def fail(reason: str, cue: str = "") -> FrameQuality:
+        return FrameQuality(False, reason, span, margin, score, cue)
+
     if score < quality["min_handedness_score"]:
-        return FrameQuality(False, "Low detection confidence", span, margin, score)
+        return fail("Low detection confidence")
     if margin < quality["min_edge_margin"]:
-        return FrameQuality(False, "Hand too close to the frame edge", span, margin, score)
+        return fail("Hand is cut off by the frame edge", "center")
     if span < quality["min_hand_span"]:
-        return FrameQuality(False, "Hand too far from the camera", span, margin, score)
+        return fail("Hand too far from the camera", "closer")
     if span > quality["max_hand_span"]:
-        return FrameQuality(False, "Hand too close to the camera", span, margin, score)
+        return fail("Hand too close to the camera", "back")
+
+    if target:
+        low, high = target.get("span", (None, None))
+        if low is not None and span < low:
+            return fail("Move closer", "closer")
+        if high is not None and span > high:
+            return fail("Move back", "back")
+        margin_max = target.get("margin_max")
+        if margin_max is not None and margin > margin_max:
+            return fail("Move to the edge of the frame", "edge")
     return FrameQuality(True, "", span, margin, score)
 
 
@@ -238,6 +262,13 @@ class RecorderApi:
         self.saved_trials: list[dict] = []
         self.completed = 0
         self.commands: queue.Queue = queue.Queue()
+        # Baseline for the relative distance targets, learned from the normal
+        # block. Until it exists, distance gating is inactive.
+        self.normal_span: float | None = None
+        self._normal_spans: list[float] = []
+        self._in_target_since: float | None = None
+        self._rejections = 0
+        self.gate_hold = float(protocol.get("gate", {}).get("hold_seconds", 0.8))
 
     # ── JS API ────────────────────────────────────────────────────────────────
 
@@ -324,10 +355,12 @@ class RecorderApi:
                 "goodFrames": self.good_frames,
                 "quality": {
                     "ok": self.live_quality.ok, "reason": self.live_quality.reason,
+                    "cue": self.live_quality.cue,
                     "span": round(self.live_quality.span, 3),
                     "margin": round(self.live_quality.margin, 3),
                     "score": round(self.live_quality.score, 3),
                 },
+                "normalSpan": round(self.normal_span, 3) if self.normal_span else None,
                 "lastResult": self.last_result,
                 "recent": self.saved_trials[-8:][::-1],
                 "block": self._block_info(trial) if trial else None,
@@ -381,6 +414,34 @@ class RecorderApi:
                 return condition
         return {}
 
+    def target_for(self, trial: Trial) -> dict:
+        """Resolve a condition's placement target for this operator and camera.
+
+        Distance targets are ratios of the operator's own normal-distance span,
+        measured from the completed normal-block trials, rather than absolute
+        numbers. A fixed span like 0.52 is trivial on a wide-angle webcam and
+        unreachable on a narrow one; a ratio means "clearly closer than your own
+        baseline" on any camera, and guarantees near and far separate.
+        """
+        condition = self._condition(trial)
+        target: dict = {}
+        ratio = condition.get("span_ratio")
+        if ratio and self.normal_span:
+            target["span"] = (ratio[0] * self.normal_span, ratio[1] * self.normal_span)
+        margin_max = condition.get("target_margin_max")
+        if margin_max is not None:
+            target["margin_max"] = margin_max
+        return target
+
+    def _record_normal_span(self, trial: Trial) -> None:
+        """Update the baseline from a completed normal-condition trial."""
+        if trial.condition != "normal" or trial.hand != "Right":
+            return
+        spans = [float(row["hand_span"]) for row in self.buffer]
+        if spans:
+            self._normal_spans.append(statistics.median(spans))
+            self.normal_span = statistics.median(self._normal_spans)
+
     def _condition_text(self, trial: Trial) -> str:
         condition = self._condition(trial)
         if condition:
@@ -397,22 +458,20 @@ class RecorderApi:
         """
         condition = self._condition(trial)
         remaining = sum(1 for item in self.plan[self.cursor:] if item.block == trial.block)
-        span = condition.get("target_span")
-        margin = condition.get("target_margin_max")
-        in_target = True
-        if span:
-            in_target &= span[0] <= self.live_quality.span <= span[1]
-        if margin is not None:
-            in_target &= self.live_quality.margin <= margin
+        target = self.target_for(trial)
+        held = (time.monotonic() - self._in_target_since
+                if self._in_target_since is not None else 0.0)
         return {
             "block": trial.block,
             "label": condition.get("label", trial.condition),
             "instruction": self._condition_text(trial),
             "hand": trial.hand,
             "trials": remaining,
-            "targetSpan": span,
-            "targetMarginMax": margin,
-            "inTarget": bool(in_target and self.live_quality.ok),
+            "targetSpan": list(target["span"]) if "span" in target else None,
+            "targetMarginMax": target.get("margin_max"),
+            "inTarget": bool(self.live_quality.ok),
+            "cue": self.live_quality.cue,
+            "holdProgress": min(1.0, held / self.gate_hold) if self.gate_hold else 1.0,
         }
 
     def _pump_commands(self) -> None:
@@ -423,7 +482,15 @@ class RecorderApi:
                 return
             if name == "resume":
                 self.paused = False
-                if self.phase in ("prompt", "saved", "rejected", "block_intro"):
+                # A block_intro is released by the position gate, not by
+                # un-pausing, so that pressing play cannot skip the check.
+                if self.phase in ("prompt", "saved", "rejected"):
+                    self._begin_countdown()
+            elif name == "skip_gate":
+                # Deliberate override for a camera that cannot reach the target.
+                self.paused = False
+                if self.phase == "block_intro":
+                    self.last_result = "Position check overridden"
                     self._begin_countdown()
             elif name == "pause":
                 self.paused = True
@@ -459,13 +526,13 @@ class RecorderApi:
             self.paused = True
             return
         if self.plan[self.cursor].block != previous_block:
-            # Hard stop at every block boundary. The first recorded session
-            # showed near/far/offcentre trials statistically identical to
-            # normal ones: the prompt changed, but nothing interrupted the
-            # rhythm, so the operator never actually moved. A block change is
-            # a physical instruction and has to be acknowledged.
+            # Hard stop at every block boundary. S01 showed near/far/offcentre
+            # trials statistically identical to normal ones: the prompt changed,
+            # but nothing interrupted the rhythm, so the operator never actually
+            # moved. The gate now waits for the measured position instead, and
+            # does not require pausing — it releases itself.
             self.phase = "block_intro"
-            self.paused = True
+            self._in_target_since = None
             return
         if saved:
             # Hold on "saved" for the rest interval; ``process`` moves on to the
@@ -485,12 +552,30 @@ class RecorderApi:
                 return
             trial = self.plan[self.cursor]
             match = self._select_hand(result, trial.hand)
+            target = self.target_for(trial)
             self.live_quality = (
-                assess(match[0], match[1], self.quality) if match
+                assess(match[0], match[1], self.quality, target) if match
                 else FrameQuality(False, f"No {trial.hand.lower()} hand detected")
             )
 
             now = time.monotonic()
+
+            # The position gate: a block starts by itself once the operator has
+            # held the required placement briefly. Nothing to read, nothing to
+            # click — the recorder waits until the body is where it needs to be.
+            if self.phase == "block_intro":
+                if self.paused:
+                    self._in_target_since = None
+                elif self.live_quality.ok:
+                    if self._in_target_since is None:
+                        self._in_target_since = now
+                    elif now - self._in_target_since >= self.gate_hold:
+                        self._in_target_since = None
+                        self._begin_countdown()
+                else:
+                    self._in_target_since = None
+                return
+
             if self.phase == "countdown" and now >= self.phase_deadline:
                 self.phase = "recording"
                 self.record_started = now
@@ -557,15 +642,27 @@ class RecorderApi:
         if self.good_frames < minimum:
             # Re-queue rather than accept: a thin trial is exactly the kind of
             # sample that poisons a small dataset.
-            self.phase = "rejected"
-            self.phase_deadline = time.monotonic() + 1.4
+            self._rejections += 1
             self.last_result = (
                 f"Rejected — only {self.good_frames}/{minimum} usable frames "
                 f"({self.live_quality.reason or 'hand lost'}). Repeating."
             )
             self.buffer = []
+            if self._rejections >= 2:
+                # Two failures in a row means the operator has drifted out of
+                # position rather than fumbled one trial. Fall back to the
+                # full-screen wordless cue instead of silently looping through
+                # rejections that require reading a status line to notice.
+                self._rejections = 0
+                self.phase = "block_intro"
+                self._in_target_since = None
+            else:
+                self.phase = "rejected"
+                self.phase_deadline = time.monotonic() + 1.4
             return
+        self._rejections = 0
 
+        self._record_normal_span(trial)
         append_rows(self.output, self.buffer)
         trial_id = self.buffer[0]["trial_id"]
         self.saved_trials.append({
