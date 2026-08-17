@@ -10,7 +10,37 @@ let targets = {};         // "gesture|condition" -> required repetitions
 const PHASE_LABELS = {
   prompt: 'READY', countdown: 'GET READY', recording: 'RECORDING',
   saved: 'SAVED', rejected: 'REJECTED', done: 'COMPLETE',
+  block_intro: 'MOVE INTO POSITION',
 };
+
+function renderBlockIntro(state) {
+  const panel = $('blockIntro');
+  const block = state.block;
+  const show = state.phase === 'block_intro' && block;
+  panel.hidden = !show;
+  if (!show) return;
+
+  $('blockLabel').textContent = `${block.label}${block.hand === 'Left' ? ' — LEFT hand' : ''}`;
+  $('blockInstruction').textContent = block.instruction;
+  $('blockTrials').textContent = `${block.trials} trials in this block`;
+
+  // The live readout is the point: it turns "move closer" into something the
+  // operator can watch converge instead of estimating by eye.
+  const target = $('blockTarget');
+  const q = state.quality;
+  let text = '', now = '';
+  if (block.targetMarginMax != null) {
+    text = `margin target ≤ ${block.targetMarginMax}`;
+    now = `now ${q.margin ? q.margin.toFixed(2) : '—'}`;
+  } else if (block.targetSpan) {
+    text = `span target ${block.targetSpan[0]}–${block.targetSpan[1]}`;
+    now = `now ${q.span ? q.span.toFixed(2) : '—'}`;
+  }
+  target.hidden = !text;
+  $('targetText').textContent = text;
+  $('targetNow').textContent = now;
+  target.classList.toggle('hit', !!block.inTarget);
+}
 
 // ── Rendering ────────────────────────────────────────────────────────────────
 
@@ -150,6 +180,7 @@ async function poll() {
   renderTrial(state);
   renderQuality(state);
   renderProgress(state);
+  renderBlockIntro(state);
 
   if (JSON.stringify(state.recent) !== JSON.stringify(recentTrials)) {
     recentTrials = state.recent;
@@ -165,7 +196,8 @@ async function poll() {
 function syncButtons(state) {
   const active = cameraOn && state.phase !== 'done';
   $('runToggle').disabled = !active;
-  $('runToggle').textContent = running ? 'Pause' : 'Begin recording';
+  $('runToggle').textContent = state.phase === 'block_intro' ? 'Start this block'
+    : running ? 'Pause' : 'Begin recording';
   $('runToggle').classList.toggle('running', running);
   $('redo').disabled = !active;
   $('skip').disabled = !active;
@@ -232,6 +264,7 @@ function bind() {
   });
   $('runToggle').addEventListener('click', () =>
     window.pywebview.api.command(running ? 'pause' : 'resume'));
+  $('blockStart').addEventListener('click', () => window.pywebview.api.command('resume'));
   $('redo').addEventListener('click', () => window.pywebview.api.command('redo'));
   $('skip').addEventListener('click', () => window.pywebview.api.command('skip'));
   $('deleteLast').addEventListener('click', () => window.pywebview.api.command('delete_last'));

@@ -2,9 +2,17 @@
   "protocol_version": 2,
   "schema_version": 2,
   "gestures": [
-    "none", "point", "pinch", "pinch_right", "open_palm", "v_sign",
-    "two_finger_scroll", "fist", "fist_thumb_up",
-    "fist_thumb_left", "fist_thumb_right"
+    "none",
+    "point",
+    "pinch",
+    "pinch_right",
+    "open_palm",
+    "v_sign",
+    "two_finger_scroll",
+    "fist",
+    "fist_thumb_up",
+    "fist_thumb_left",
+    "fist_thumb_right"
   ],
   "actions": {
     "none": "no action",
@@ -37,37 +45,66 @@
       "id": "normal",
       "label": "Normal",
       "instruction": "Sit at your usual presenting distance, hand at chest height, centred in the frame.",
-      "repetitions": 5
+      "repetitions": 5,
+      "target_span": [
+        0.28,
+        0.46
+      ]
     },
     {
       "id": "near",
       "label": "Close to camera",
-      "instruction": "Move roughly one arm-length closer, so the hand fills much more of the frame.",
-      "repetitions": 3
+      "instruction": "Move clearly closer - the hand should fill much more of the frame. Watch the span readout and get it above 0.52 before starting.",
+      "repetitions": 3,
+      "target_span": [
+        0.52,
+        0.9
+      ]
     },
     {
       "id": "far",
       "label": "Far from camera",
-      "instruction": "Lean back or step away, so the hand is noticeably smaller in the frame.",
-      "repetitions": 3
+      "instruction": "Lean back or step away so the hand looks small. Watch the span readout and get it below 0.26 before starting.",
+      "repetitions": 3,
+      "target_span": [
+        0.12,
+        0.26
+      ]
     },
     {
       "id": "tilted",
       "label": "Rotated hand",
       "instruction": "Hold the same pose but rotate the wrist - tilt left, right, and angle the palm away from the camera. Change the tilt every repetition.",
-      "repetitions": 3
+      "repetitions": 3,
+      "target_span": [
+        0.26,
+        0.46
+      ]
     },
     {
       "id": "offcentre",
       "label": "Off-centre",
-      "instruction": "Hold the pose near an edge or corner of the frame instead of the middle.",
-      "repetitions": 2
+      "instruction": "Hold the pose near an edge or corner, not the middle. Watch the margin readout and get it below 0.07 before starting.",
+      "repetitions": 2,
+      "target_span": [
+        0.22,
+        0.46
+      ],
+      "target_margin_max": 0.07
     }
   ],
   "left_hand": {
     "enabled": true,
-    "gestures": ["open_palm", "fist", "none"],
-    "conditions": ["normal", "near", "far"],
+    "gestures": [
+      "open_palm",
+      "fist",
+      "none"
+    ],
+    "conditions": [
+      "normal",
+      "near",
+      "far"
+    ],
     "repetitions": 2,
     "note": "The product reads only open_palm (controls lock) and fist (voice recording) from the left hand. These trials are a held-out check that mirroring right-hand training data into the left hand's frame actually holds."
   },

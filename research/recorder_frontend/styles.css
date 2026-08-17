@@ -115,6 +115,31 @@ header { display: flex; align-items: center; justify-content: space-between; }
 .phase-overlay.saved #phaseLabel { color: var(--good); }
 .phase-overlay.rejected #phaseLabel { color: var(--warn); }
 
+/* ── Block briefing ─────────────────────────────────────────────────────── */
+.block-intro {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; text-align: center;
+  padding: 26px; background: rgba(10, 12, 16, .93); backdrop-filter: blur(3px);
+}
+.block-kicker {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+}
+.block-intro h3 { margin: 0; font-size: 30px; letter-spacing: -0.02em; }
+.block-intro p { margin: 0; max-width: 44ch; color: #c8cedb; font-size: 14.5px; }
+.block-trials { color: var(--muted) !important; font-size: 12.5px !important; }
+.block-intro button { max-width: 300px; margin-top: 6px; }
+
+.block-target {
+  display: flex; align-items: center; gap: 12px; margin: 4px 0;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+}
+.block-target .target-text { color: var(--muted); }
+.block-target .target-now { font-size: 17px; font-weight: 700; color: var(--warn); }
+.block-target.hit { border-color: rgba(53, 201, 138, .55); background: rgba(53, 201, 138, .1); }
+.block-target.hit .target-now { color: var(--good); }
+
 /* ── Quality ────────────────────────────────────────────────────────────── */
 .quality {
   display: flex; align-items: center; gap: 10px; font-size: 13px;

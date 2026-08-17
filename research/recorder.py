@@ -266,7 +266,9 @@ class RecorderApi:
             if self._worker and self._worker.is_alive():
                 return {"ok": True}
             self._error = None
-            self.phase = "prompt"
+            # Open on the block briefing rather than on a trial, so the first
+            # block's placement instruction is read before anything is recorded.
+            self.phase = "block_intro"
             self.paused = True
             self._worker = RecorderWorker(self, int(camera_index))
             self._worker.start()
@@ -328,6 +330,7 @@ class RecorderApi:
                 },
                 "lastResult": self.last_result,
                 "recent": self.saved_trials[-8:][::-1],
+                "block": self._block_info(trial) if trial else None,
             }
 
     def shutdown(self) -> None:
@@ -372,11 +375,45 @@ class RecorderApi:
 
     # ── State machine ────────────────────────────────────────────────────────
 
-    def _condition_text(self, trial: Trial) -> str:
+    def _condition(self, trial: Trial) -> dict:
         for condition in self.protocol["conditions"]:
             if condition["id"] == trial.condition:
-                return condition["instruction"]
+                return condition
+        return {}
+
+    def _condition_text(self, trial: Trial) -> str:
+        condition = self._condition(trial)
+        if condition:
+            return condition["instruction"]
         return self.protocol.get("left_hand", {}).get("note", "")
+
+    def _block_info(self, trial: Trial) -> dict:
+        """Briefing shown at a block boundary, with a measurable placement target.
+
+        S01 showed that a prose instruction alone does not change behaviour: the
+        near, far and offcentre blocks came out statistically identical to
+        normal. A numeric target the operator can watch converge is checkable in
+        the moment, which prose is not.
+        """
+        condition = self._condition(trial)
+        remaining = sum(1 for item in self.plan[self.cursor:] if item.block == trial.block)
+        span = condition.get("target_span")
+        margin = condition.get("target_margin_max")
+        in_target = True
+        if span:
+            in_target &= span[0] <= self.live_quality.span <= span[1]
+        if margin is not None:
+            in_target &= self.live_quality.margin <= margin
+        return {
+            "block": trial.block,
+            "label": condition.get("label", trial.condition),
+            "instruction": self._condition_text(trial),
+            "hand": trial.hand,
+            "trials": remaining,
+            "targetSpan": span,
+            "targetMarginMax": margin,
+            "inTarget": bool(in_target and self.live_quality.ok),
+        }
 
     def _pump_commands(self) -> None:
         while True:
@@ -386,7 +423,7 @@ class RecorderApi:
                 return
             if name == "resume":
                 self.paused = False
-                if self.phase in ("prompt", "saved", "rejected"):
+                if self.phase in ("prompt", "saved", "rejected", "block_intro"):
                     self._begin_countdown()
             elif name == "pause":
                 self.paused = True
@@ -413,11 +450,21 @@ class RecorderApi:
         self.last_result = reason
 
     def _advance(self, saved: bool) -> None:
+        previous_block = self.plan[self.cursor].block if self.cursor < len(self.plan) else None
         self.cursor += 1
         self.buffer = []
         self.good_frames = 0
         if self.cursor >= len(self.plan):
             self.phase = "done"
+            self.paused = True
+            return
+        if self.plan[self.cursor].block != previous_block:
+            # Hard stop at every block boundary. The first recorded session
+            # showed near/far/offcentre trials statistically identical to
+            # normal ones: the prompt changed, but nothing interrupted the
+            # rhythm, so the operator never actually moved. A block change is
+            # a physical instruction and has to be acknowledged.
+            self.phase = "block_intro"
             self.paused = True
             return
         if saved:

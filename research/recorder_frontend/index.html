@@ -46,6 +46,20 @@
             <span id="phaseLabel">GET READY</span>
             <span id="phaseTimer">0.0</span>
           </div>
+
+          <!-- Block briefing: a hard stop whenever the physical setup must
+               change, so a new condition cannot slip past unnoticed. -->
+          <div id="blockIntro" class="block-intro" hidden>
+            <span class="block-kicker">Next block</span>
+            <h3 id="blockLabel">Normal</h3>
+            <p id="blockInstruction"></p>
+            <div id="blockTarget" class="block-target">
+              <span class="target-text" id="targetText"></span>
+              <span class="target-now" id="targetNow">—</span>
+            </div>
+            <p id="blockTrials" class="block-trials"></p>
+            <button id="blockStart" class="primary big">Start this block</button>
+          </div>
         </div>
 
         <div id="qualityBar" class="quality">
