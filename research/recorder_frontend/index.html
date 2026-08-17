@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gesture Recorder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand">
+        <span class="mark">R</span>
+        <div>
+          <h1>Gesture Recorder</h1>
+          <p>Development tool — landmarks only, no video is saved</p>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span id="sessionTag" class="tag">—</span>
+        <span id="phaseBadge" class="badge"><i></i><span>Idle</span></span>
+      </div>
+    </header>
+
+    <section class="layout">
+      <!-- ── Stage ──────────────────────────────────────────────────────── -->
+      <section class="stage card">
+        <div class="prompt">
+          <div class="prompt-head">
+            <span id="trialCounter" class="counter">Trial — / —</span>
+            <span id="conditionChip" class="chip">—</span>
+            <span id="handChip" class="chip hand">Right hand</span>
+          </div>
+          <h2 id="gestureName">Ready when you are</h2>
+          <p id="instruction">Choose a camera and press Start, then Begin recording.</p>
+          <p id="conditionText" class="condition-text"></p>
+        </div>
+
+        <div class="viewport">
+          <img id="preview" alt="Camera preview with hand skeleton">
+          <div id="viewportEmpty" class="viewport-empty">
+            <div class="camera-icon"></div>
+            <p>Camera is off</p>
+          </div>
+          <div id="phaseOverlay" class="phase-overlay" hidden>
+            <span id="phaseLabel">GET READY</span>
+            <span id="phaseTimer">0.0</span>
+          </div>
+        </div>
+
+        <div id="qualityBar" class="quality">
+          <span id="qualityDot" class="dot"></span>
+          <span id="qualityText">Waiting for a hand…</span>
+          <span class="quality-metrics">
+            <span>span <b id="mSpan">—</b></span>
+            <span>margin <b id="mMargin">—</b></span>
+            <span>conf <b id="mScore">—</b></span>
+            <span>frames <b id="mFrames">0</b></span>
+          </span>
+        </div>
+
+        <div id="lastResult" class="last-result"></div>
+        <div id="error" class="error" hidden></div>
+      </section>
+
+      <!-- ── Side panel ─────────────────────────────────────────────────── -->
+      <aside class="panel">
+        <div class="card setup">
+          <div class="section-title"><span>Capture</span>
+            <button id="refreshCameras" class="text-button">Refresh</button>
+          </div>
+          <label>Camera<select id="camera"></select></label>
+          <div class="button-row">
+            <button id="startCamera" class="primary">Start camera</button>
+            <button id="stopCamera" class="ghost" disabled>Stop</button>
+          </div>
+        </div>
+
+        <div class="card controls">
+          <div class="section-title"><span>Recording</span></div>
+          <button id="runToggle" class="primary big" disabled>Begin recording</button>
+          <div class="button-row">
+            <button id="redo" class="ghost" disabled>Retake</button>
+            <button id="skip" class="ghost" disabled>Skip</button>
+          </div>
+          <button id="deleteLast" class="danger" disabled>Delete last trial</button>
+          <p class="hint">Space — pause / resume · R — retake · S — skip</p>
+        </div>
+
+        <div class="card progress-card">
+          <div class="section-title"><span>Progress</span>
+            <button id="refreshStats" class="text-button">Reload stats</button>
+          </div>
+          <div class="progress-track"><div id="progressFill"></div></div>
+          <p id="progressText" class="progress-text">0 of 0 trials</p>
+          <div id="coverage" class="coverage"></div>
+        </div>
+
+        <div class="card recent-card">
+          <div class="section-title"><span>Recent trials</span></div>
+          <ul id="recent" class="recent"><li class="muted">Nothing recorded yet</li></ul>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

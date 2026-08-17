@@ -30,12 +30,27 @@ voice = [
 # inside the environment, so it's the reliable choice for running from source.
 gui-qt = ["qtpy>=2.4", "PyQt6>=6.6", "PyQt6-WebEngine>=6.6"]
 build = ["pyinstaller>=6.8"]
+# Development-only: recording datasets and training the gesture model. The
+# shipped application reads the exported .npz with NumPy alone, so scikit-learn
+# is never a runtime dependency and its pickle-compatibility caveats do not
+# reach end users.
+research = [
+  "scikit-learn>=1.4",
+  "numpy>=1.26",
+]
 
 [project.gui-scripts]
 gesture-presenter = "app:main"
 
 [tool.setuptools]
-py-modules = ["app", "config", "devices", "permissions", "hand_tracker", "gestures", "actions", "speech"]
+# research/ is intentionally absent: the recorder and trainer are development
+# tools, not part of the installable application.
+py-modules = ["app", "config", "devices", "permissions", "hand_tracker", "gestures",
+              "gesture_features", "gesture_model", "actions", "speech"]
 
 [tool.setuptools.data-files]
-"gesture_presenter" = ["hand_landmarker.task", "frontend/index.html", "frontend/styles.css", "frontend/app.js"]
+"gesture_presenter" = [
+  "hand_landmarker.task",
+  "models/gesture_mlp.npz",
+  "frontend/index.html", "frontend/styles.css", "frontend/app.js",
+]

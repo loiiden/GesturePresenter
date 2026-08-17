@@ -21,3 +21,10 @@ build/
 dist/
 *.dmg
 *.AppImage
+
+# Recorded datasets. Landmarks are still biometric-adjacent personal data and
+# are large; keep them local. The trained model in models/ IS committed, since
+# the application needs it at runtime.
+research/data/
+research/reports/
+codebase.md
