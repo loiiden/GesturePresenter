@@ -8,7 +8,11 @@ version = "0.1.0"
 description = "Cross-platform gesture controller for presentations"
 requires-python = ">=3.10,<3.13"
 dependencies = [
-  "mediapipe>=0.10.14",
+  # Upper bound is deliberate. mediapipe 1.x aborts at landmarker creation on
+  # macOS with "graph_service.h:139] Check failed: service_ Service is
+  # unavailable" from DrishtiMetalHelper — a hard process abort, not a Python
+  # exception, so it cannot be caught and retried at runtime.
+  "mediapipe>=0.10.14,<1.0",
   "opencv-python>=4.9",
   "pyautogui>=0.9.54",
   "pyperclip>=1.8",
