@@ -19,8 +19,7 @@ class Gesture(str, Enum):
     POINT            = "point"             # index only          → laser pointer
     V_SIGN           = "v_sign"            # index + middle held → Mission Control
     TWO_FINGER_SCROLL = "two_finger_scroll" # closed two fingers  → scroll
-    PINCH            = "pinch"             # thumb+index still   → click on release
-    PINCH_DRAG       = "pinch_drag"
+    PINCH            = "pinch"             # thumb+index touch   → click on release
     PINCH_RIGHT      = "pinch_right"       # thumb+middle        → right-click
     OPEN_PALM        = "open_palm"          # horizontal swipe    → change slide
     FIST             = "fist"              # held fist           → black screen
@@ -160,38 +159,33 @@ class GestureClassifier:
         return Gesture.NONE, {"pos": tip_pos}
 
 
-# ── Pinch tracker (click vs drag distinction) ─────────────────────────────────
+# ── Pinch tracker (one click per pinch) ───────────────────────────────────────
 
-DRAG_THRESHOLD = 0.035
 PINCH_ON_FRAMES = 2
 PINCH_OFF_FRAMES = 2
 
 class PinchTracker:
-    """
-    Emits high-level events from raw pinch state:
-      ("click",)
-      ("drag_delta", dx_norm, dy_norm)
-      ("drag_end",)
+    """Emits ("click",) once per completed pinch.
+
+    A pinch is deliberately allowed to move. Holding two fingertips together
+    perfectly still is not something a presenter can do while standing, and the
+    hand always drifts a little, so movement during a pinch carries no meaning
+    and is simply ignored.
+
+    The click fires on release rather than on contact, so a pinch held by
+    accident does not repeat, and the debounce on both edges absorbs the
+    single-frame flicker that landmark tracking produces at the boundary.
     """
     def __init__(self):
-        self._active   = False
-        self._dragging = False
-        self._start    = (0.0, 0.0)
-        self._prev     = (0.0, 0.0)
+        self._active = False
         self._on_count = 0
         self._off_count = 0
-
-    @property
-    def is_dragging(self) -> bool:
-        return self._dragging
 
     @property
     def is_active(self) -> bool:
         return self._active
 
-    def update(self, pinching: bool, pos: tuple[float, float]) -> list:
-        events = []
-
+    def update(self, pinching: bool, pos: tuple[float, float] | None = None) -> list:
         if pinching:
             self._on_count += 1
             self._off_count = 0
@@ -199,40 +193,16 @@ class PinchTracker:
             self._off_count += 1
             self._on_count = 0
 
-        stable_on = pinching and (self._active or self._on_count >= PINCH_ON_FRAMES)
-        stable_off = not pinching and self._active and self._off_count >= PINCH_OFF_FRAMES
-
-        if stable_on and not self._active:
-            self._active   = True
-            self._dragging = False
-            self._start    = pos
-            self._prev     = pos
-
-        elif stable_on and self._active:
-            dx_total = pos[0] - self._start[0]
-            dy_total = pos[1] - self._start[1]
-            if not self._dragging and math.hypot(dx_total, dy_total) > DRAG_THRESHOLD:
-                self._dragging = True
-
-            if self._dragging:
-                dx = pos[0] - self._prev[0]
-                dy = pos[1] - self._prev[1]
-                events.append(("drag_delta", dx, dy))
-                self._prev = pos
-
-        elif stable_off:
-            if self._dragging:
-                events.append(("drag_end",))
-            else:
-                events.append(("click",))
-            self._active   = False
-            self._dragging = False
-
-        return events
+        if pinching and not self._active and self._on_count >= PINCH_ON_FRAMES:
+            self._active = True
+        elif not pinching and self._active and self._off_count >= PINCH_OFF_FRAMES:
+            self._active = False
+            return [("click",)]
+        return []
 
     def reset(self) -> None:
         """Cancel an in-progress gesture after tracking is lost."""
-        self._active = self._dragging = False
+        self._active = False
         self._on_count = self._off_count = 0
 
 

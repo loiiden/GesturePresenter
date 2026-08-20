@@ -97,7 +97,7 @@ def _rule_predictions(rows) -> list[str]:
     return predictions
 
 
-def contact_gates(rows, margin: float = 1.20, release: float = 1.55) -> dict:
+def contact_gates(rows, margin: float = 1.20, release: float = 1.32) -> dict:
     """Calibrate per-class fingertip-contact limits from the operator's own data.
 
     ``pinch`` means the thumb and index finger actually touch. A classifier does
@@ -112,6 +112,11 @@ def contact_gates(rows, margin: float = 1.20, release: float = 1.55) -> dict:
     derived per operator because hand proportions differ; ``margin`` is applied
     over the widest genuine example so normal variation is never rejected, and
     ``release`` gives hysteresis so a held pinch does not flicker.
+
+    ``release`` is kept deliberately tight. Because the click fires when the
+    pinch *ends*, a wide release band means a partly opened hand still counts as
+    pinching and the click never arrives — the gesture feels stuck. The band has
+    to stay clear of the distances an open pointing hand reaches.
     """
     from gesture_features import CONTACT_PAIRS, contact_distance
 

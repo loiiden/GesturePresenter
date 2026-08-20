@@ -59,7 +59,6 @@ FINGERTIP_IDS = {4, 8, 12, 16, 20}
 
 GESTURE_COLORS = {
     Gesture.PINCH:            (0, 140, 255),
-    Gesture.PINCH_DRAG:       (0, 200, 255),
     Gesture.PINCH_RIGHT:      (100, 0, 255),
     Gesture.POINT:            (0, 80, 255),
     Gesture.V_SIGN:           (255, 120, 40),
@@ -135,7 +134,7 @@ def draw_hand(frame, lms, active_gesture: Gesture):
         cv2.circle(frame, (x, y), r, c, -1, cv2.LINE_AA)
 
 
-def draw_hud(frame, gesture: Gesture, pinch_dragging: bool,
+def draw_hud(frame, gesture: Gesture,
              controls_enabled: bool, last_action: str):
     h, w = frame.shape[:2]
     mode_color = (0, 220, 120) if controls_enabled else (80, 80, 255)
@@ -148,8 +147,6 @@ def draw_hud(frame, gesture: Gesture, pinch_dragging: bool,
         cv2.putText(frame, last_action, ((w - tw) // 2, h - 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 220, 255), 2, cv2.LINE_AA)
     label = gesture.value.replace("_", " ").upper()
-    if gesture == Gesture.PINCH and pinch_dragging:
-        label = "PINCH DRAG"
     if gesture not in (Gesture.NONE,):
         cv2.putText(frame, label, (20, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2,
@@ -439,10 +436,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                     actions.move_cursor(int(cx), int(cy))
 
                 for ev in pinch_events if presentation_enabled else ():
-                    # In presentation mode a pinch has no drag/scroll meaning;
-                    # always turn its release into one click. This makes normal
-                    # landmark movement during a pinch harmless.
-                    if ev[0] in ("click", "drag_end"):
+                    if ev[0] == "click":
                         actions.left_click()
                         last_action, last_action_until = "CLICK", time.monotonic() + 1.0
 
@@ -502,8 +496,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             if left_lms:
                 draw_hand(frame, left_lms, Gesture.NONE)
             visible_action = last_action if time.monotonic() < last_action_until else ""
-            draw_hud(frame, active_gesture, pinch_track.is_dragging,
-                     presentation_enabled, visible_action)
+            draw_hud(frame, active_gesture, presentation_enabled, visible_action)
 
             with speech_lock:
                 cur_speech, cur_text = speech_state, pending_text
