@@ -28,9 +28,9 @@
     "fist_thumb_right": "no action - recorded so a thumb-out fist is not mistaken for a fist"
   },
   "instructions": {
-    "none": "Relax. Move your hand naturally, rest it, gesture while talking - anything that is NOT one of the command poses. Vary it every repetition.",
-    "point": "Extend the index finger only. Thumb tucked against the palm, other three fingers curled.",
-    "pinch": "Touch the thumb tip to the index fingertip. Middle, ring and pinky loosely curled.",
+    "none": "Relax. Move your hand naturally, rest it, gesture while talking, reach for the keyboard - anything that is NOT a command pose. Include a few slow thumb-toward-index movements that stop short of touching. Vary it every repetition.",
+    "point": "Extend the index finger only. IMPORTANT: vary your thumb every repetition - sometimes stuck right out, sometimes tucked in, and sometimes moved close to the index finger WITHOUT touching it. That last variant is the one that teaches the model where a pinch begins.",
+    "pinch": "Touch the thumb tip to the index fingertip - they must actually make contact. Middle, ring and pinky loosely curled.",
     "pinch_right": "Touch the thumb tip to the MIDDLE fingertip while keeping the index finger clearly extended.",
     "open_palm": "All five fingers extended and spread. Move the palm slowly side to side while recording.",
     "v_sign": "Index and middle extended in a WIDE V. Ring and pinky curled, thumb tucked.",
@@ -112,5 +112,8 @@
   "gate": {
     "hold_seconds": 0.8,
     "_note": "A block starts only after the measured position stays inside its target band for this long. Targets are ratios of the operator's own normal-distance span, calibrated from the first block, because absolute spans are not reachable on every camera."
+  },
+  "notes": {
+    "contact_zone": "point and none deliberately include poses where the thumb approaches the index finger without contact. S01 and S02 contained no such examples, leaving an unlabelled gap between a closed pinch (max 0.69 normalized) and an open point (min 1.02) - exactly the zone a hand crosses on the way to a pinch, where the model's behaviour was therefore arbitrary."
   }
 }

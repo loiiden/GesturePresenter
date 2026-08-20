@@ -33,7 +33,8 @@ from pathlib import Path
 import numpy as np
 
 from gesture_features import (
-    FEATURE_VERSION, INDEX_TIP, FeatureConfig, extract_features,
+    FEATURE_VERSION, INDEX_TIP, FeatureConfig, contact_distance,
+    features_from_points, prepare_points,
 )
 from gestures import Gesture
 
@@ -77,6 +78,11 @@ class GestureNetwork:
         self.none_index = next(
             (i for i, g in enumerate(self.gestures) if g == Gesture.NONE), None
         )
+        # Calibrated at training time from the operator's own recorded pinches.
+        self.contact_gates = {
+            label: gate for label, gate in self.metadata.get("contact_gates", {}).items()
+            if label in self.labels
+        }
 
     @staticmethod
     def _to_gesture(label: str) -> Gesture:
@@ -107,11 +113,53 @@ class MLGestureClassifier:
         self.hand = hand
         self._smoothed: np.ndarray | None = None
         self._current: int | None = None
+        self._gated_on: set[str] = set()
         self._warned_missing_world = False
 
     def reset(self) -> None:
         self._smoothed = None
         self._current = None
+        self._gated_on = set()
+
+    def _apply_contact_gate(self, index: int | None, points) -> int | None:
+        """Veto a contact gesture whose fingertips are not actually touching.
+
+        The model is trusted to identify hand *shape*, but "pinch" is defined by
+        contact, and the training data contains no examples in the zone where a
+        thumb is approaching without touching — precisely the zone a hand
+        crosses on its way to a pinch. Rather than let an unsupervised region of
+        the decision surface decide whether a click fires, the distance is
+        measured and the prediction is rejected when the fingers are apart.
+
+        Rejection falls through to the best non-contact class instead of NONE,
+        so an approaching thumb reads as the pose it still is (usually `point`)
+        and pointer movement is not interrupted mid-gesture.
+        """
+        if index is None or self._smoothed is None:
+            return index
+        gates = self.network.contact_gates
+        label = self.network.labels[index]
+        gate = gates.get(label)
+        if gate is None:
+            self._gated_on.discard(label)
+            return index
+
+        distance = contact_distance(points, label)
+        if distance is None:
+            return index
+        # Hysteresis: entering a pinch demands real contact, holding one
+        # tolerates the drift that happens while the hand moves.
+        limit = gate["release"] if label in self._gated_on else gate["enter"]
+        if distance <= limit:
+            self._gated_on.add(label)
+            return index
+
+        self._gated_on.discard(label)
+        ranked = np.argsort(self._smoothed)[::-1]
+        for candidate in ranked:
+            if self.network.labels[candidate] not in gates:
+                return int(candidate)
+        return self.network.none_index
 
     def classify(self, landmarks, world_landmarks=None, aspect: float = 1.0
                  ) -> tuple[Gesture, dict]:
@@ -126,10 +174,8 @@ class MLGestureClassifier:
                 "result's hand_world_landmarks are passed through.",
                 RuntimeWarning, stacklevel=2,
             )
-        features = extract_features(
-            landmarks, world_landmarks, aspect=aspect, hand=self.hand,
-            config=self.network.feature_config,
-        )
+        points, world = prepare_points(landmarks, world_landmarks, aspect, self.hand)
+        features = features_from_points(points, world, self.network.feature_config)
         probabilities = self.network.probabilities(features)
         self._smoothed = (
             probabilities if self._smoothed is None
@@ -145,6 +191,8 @@ class MLGestureClassifier:
             self._current = best
         else:
             self._current = self.network.none_index
+
+        self._current = self._apply_contact_gate(self._current, points)
 
         index = self._current if self._current is not None else self.network.none_index
         gesture = self.network.gestures[index] if index is not None else Gesture.NONE

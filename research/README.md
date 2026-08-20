@@ -169,6 +169,36 @@ nowhere to land and the model assigns it to its nearest neighbour — `fist` —
 which blacks the screen mid-presentation. Giving them their own class turns a
 disruptive misfire into a harmless no-op.
 
+### Contact gates
+
+`pinch` and `pinch_right` are defined by fingertips *touching*, but a classifier
+learns whatever separates its training data, which is not the same thing. In
+S01+S02 every recorded pinch had a normalized thumb-index distance below 0.69
+and every point above 1.02, leaving the 0.69–1.02 band completely unlabelled —
+and that band is exactly what a hand crosses while a thumb approaches a finger.
+The learned boundary there was arbitrary extrapolation, so a click could fire
+before contact.
+
+The runtime therefore measures the distance and vetoes a predicted contact
+gesture when the fingers are apart, falling through to the best non-contact
+class (usually `point`) so pointer movement is not interrupted. Limits are
+calibrated per operator at training time from their own recorded pinches —
+p99 x 1.20 to enter, x 1.55 to release — because hand proportions differ. The
+percentile rather than the maximum keeps one mistracked frame from widening the
+gate permanently.
+
+Measured effect on an interpolated approach, thumb closing toward index:
+
+| thumb-index distance | model alone | with the gate |
+| --- | --- | --- |
+| 1.015 | point | point |
+| 0.848 | **pinch** | point |
+| 0.697 | pinch | pinch |
+
+The gate rejects none of the genuine recorded pinches. The protocol also now
+asks for close-but-not-touching thumb poses during `point` and `none` trials, so
+future sessions supervise the zone directly instead of relying on the veto alone.
+
 Motion-dependent behaviour is unchanged and still lives outside the model:
 `PinchTracker` distinguishes click from drag, `PalmSwipeTracker` turns a held
 palm into a directional swipe, `ScrollTracker` integrates vertical movement.

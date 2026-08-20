@@ -276,3 +276,29 @@ def features_from_points(
 
 def feature_count(config: FeatureConfig = DEFAULT_CONFIG) -> int:
     return len(feature_names(config))
+
+
+# ── Contact measurement ───────────────────────────────────────────────────────
+
+#: Classes defined by two fingertips physically touching, and the pair involved.
+#: A classifier optimises for whatever separates its training data, which is not
+#: the same as the physical definition of the gesture: with no examples in the
+#: zone where a thumb is *approaching* but not touching, the learned boundary
+#: there is arbitrary. These pairs let that zone be constrained explicitly.
+CONTACT_PAIRS = {
+    "pinch": (THUMB_TIP, INDEX_TIP),
+    "pinch_right": (THUMB_TIP, MIDDLE_TIP),
+}
+
+
+def contact_distance(points: np.ndarray, label: str) -> float | None:
+    """Palm-normalized distance between the two fingertips a class requires.
+
+    ``points`` must already be aspect- and chirality-corrected. Returns None for
+    classes that do not depend on contact.
+    """
+    pair = CONTACT_PAIRS.get(label)
+    if pair is None:
+        return None
+    canonical = canonicalize(points)
+    return float(np.linalg.norm(canonical[pair[0]] - canonical[pair[1]]))

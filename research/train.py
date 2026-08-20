@@ -97,6 +97,46 @@ def _rule_predictions(rows) -> list[str]:
     return predictions
 
 
+def contact_gates(rows, margin: float = 1.20, release: float = 1.55) -> dict:
+    """Calibrate per-class fingertip-contact limits from the operator's own data.
+
+    ``pinch`` means the thumb and index finger actually touch. A classifier does
+    not learn that definition — it learns whatever separates the training
+    classes, and the recorded data contains a wide unlabelled gap between a
+    closed pinch and an open point. Inside that gap the learned boundary is
+    arbitrary extrapolation, yet it is exactly the region a hand passes through
+    while a thumb approaches a finger, so it decides whether a click fires early.
+
+    The gate closes that gap with a measurement instead of a guess: a predicted
+    pinch is only accepted when the fingertips really are close. Limits are
+    derived per operator because hand proportions differ; ``margin`` is applied
+    over the widest genuine example so normal variation is never rejected, and
+    ``release`` gives hysteresis so a held pinch does not flicker.
+    """
+    from gesture_features import CONTACT_PAIRS, contact_distance
+
+    gates = {}
+    for label in CONTACT_PAIRS:
+        distances = [
+            contact_distance(row_points(row)[0], label)
+            for row in rows if row["gesture"] == label
+        ]
+        if not distances:
+            continue
+        # A high percentile rather than the maximum: a single mistracked frame
+        # in thousands should not widen the gate for every future prediction.
+        widest = float(np.percentile(distances, 99.0))
+        gates[label] = {
+            "enter": round(widest * margin, 4),
+            "release": round(widest * release, 4),
+            "observed_p99": round(widest, 4),
+            "observed_max": round(float(np.max(distances)), 4),
+            "observed_median": round(float(np.median(distances)), 4),
+            "samples": len(distances),
+        }
+    return gates
+
+
 def export_npz(path: Path, pipeline, labels, config: FeatureConfig, metadata: dict) -> None:
     """Flatten a StandardScaler + MLPClassifier pipeline into plain arrays."""
     scaler = pipeline.named_steps["standardscaler"]
@@ -194,9 +234,15 @@ def main(argv=None) -> None:
                 estimator.fit(X_train, y_train)
                 results[name] = _report(name, test_rows, estimator.predict(X_test))
 
+    gates = contact_gates(train_rows)
+    for label, gate in gates.items():
+        print(f"Contact gate {label}: enter <= {gate['enter']}, release > {gate['release']} "
+              f"(p99 of genuine examples {gate['observed_p99']}, median {gate['observed_median']})")
+
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "feature_version": FEATURE_VERSION,
+        "contact_gates": gates,
         "hidden_layers": list(hidden),
         "augment_copies": args.augment_copies,
         "training_frames": int(len(train_rows)),
