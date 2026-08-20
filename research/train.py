@@ -117,22 +117,39 @@ def contact_gates(rows, margin: float = 1.20, release: float = 1.55) -> dict:
 
     gates = {}
     for label in CONTACT_PAIRS:
-        distances = [
-            contact_distance(row_points(row)[0], label)
-            for row in rows if row["gesture"] == label
-        ]
-        if not distances:
+        by_trial: dict[str, list[float]] = {}
+        for row in rows:
+            if row["gesture"] == label:
+                by_trial.setdefault(row["trial_id"], []).append(
+                    contact_distance(row_points(row)[0], label)
+                )
+        if not by_trial:
             continue
-        # A high percentile rather than the maximum: a single mistracked frame
-        # in thousands should not widen the gate for every future prediction.
-        widest = float(np.percentile(distances, 99.0))
+
+        # Outlier *trials* are removed before calibrating, not outlier frames. A
+        # trial where the fingers never actually met contributes ~45 consistent
+        # frames, which survives any per-frame percentile and would widen the
+        # gate permanently. Judging trials by their median and cutting at
+        # median + 4 MAD isolates that case while keeping normal variation.
+        medians = np.array([float(np.median(v)) for v in by_trial.values()])
+        centre = float(np.median(medians))
+        mad = float(np.median(np.abs(medians - centre))) * 1.4826
+        limit = centre + 4 * mad if mad > 0 else centre * 1.5
+        kept, rejected = [], []
+        for trial_id, values in by_trial.items():
+            if float(np.median(values)) <= limit:
+                kept.extend(values)
+            else:
+                rejected.append((trial_id, round(float(np.median(values)), 3)))
+
+        widest = float(np.percentile(kept, 99.0))
         gates[label] = {
             "enter": round(widest * margin, 4),
             "release": round(widest * release, 4),
             "observed_p99": round(widest, 4),
-            "observed_max": round(float(np.max(distances)), 4),
-            "observed_median": round(float(np.median(distances)), 4),
-            "samples": len(distances),
+            "observed_median": round(float(np.median(kept)), 4),
+            "samples": len(kept),
+            "excluded_trials": rejected,
         }
     return gates
 
@@ -238,6 +255,9 @@ def main(argv=None) -> None:
     for label, gate in gates.items():
         print(f"Contact gate {label}: enter <= {gate['enter']}, release > {gate['release']} "
               f"(p99 of genuine examples {gate['observed_p99']}, median {gate['observed_median']})")
+        for trial_id, value in gate["excluded_trials"]:
+            print(f"  ! trial {trial_id} excluded from calibration: median contact "
+                  f"distance {value} — the fingers were probably never touching")
 
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),

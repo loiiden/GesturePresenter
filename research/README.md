@@ -261,8 +261,43 @@ original geometric rules and says so on stdout.
 | `train.py` | Training, evaluation, `.npz` export |
 | `selftest.py` | Camera-free end-to-end pipeline check |
 
+## Results
+
+Three sessions from one participant (P001), recorded on separate occasions with
+the lighting and seating changed between them. S03 was held out entirely:
+26,253 frames / 579 trials, of which 8,752 frames / 193 trials are the holdout.
+
+Trial-level scores on the held-out session:
+
+| Classifier | Trial accuracy | Macro-F1 |
+| --- | --- | --- |
+| Random forest | 0.995 | 0.995 |
+| **MLP (shipped)** | **0.990** | **0.990** |
+| Decision tree | 0.984 | 0.988 |
+| Logistic regression | 0.984 | 0.984 |
+| Hard-coded rules | 0.798 | 0.770 |
+
+The forest is one trial ahead of the MLP out of 193 — inside the noise at this
+sample size, and it does not survive the export path, since a 300-tree forest
+cannot be flattened into a small dense-weight archive the way an MLP can. The
+MLP is chosen for a 129 KB dependency-free artifact at statistically
+indistinguishable accuracy.
+
+The rules fail where the product actually hurts:
+
+| Class | Rules F1 | MLP F1 | Consequence of the rules' error |
+| --- | --- | --- | --- |
+| `none` | 0.32 | 0.95 | acts on hands that were not commanding anything |
+| `fist_thumb_right` | 0.12 | 1.00 | collapses onto `fist` → blacks the screen |
+| `fist_thumb_up` | 0.64 | 0.97 | spurious play/pause |
+| `v_sign` | 0.81 | 1.00 | missed Mission Control |
+
+**Left hand:** 18/18 correct on the held-out session, classified by mirroring
+right-hand training data into the left hand's frame. The controls lock and voice
+trigger have no left-hand training examples of their own.
+
 ## Scope
 
-This is a personalized pilot: one participant unless more are recorded. Held-out
-*session* accuracy says the model survives a new sitting, not that it generalizes
-to new people. Report it that way.
+A personalized pilot: one participant. Held-out *session* accuracy says the
+model survives a new sitting with different lighting and seating — not that it
+generalizes to other people. Report it that way.
