@@ -13,6 +13,9 @@ icon = (
 datas = [
     ("hand_landmarker.task", "."),
     ("frontend", "frontend"),
+    # The trained gesture classifier. research/ is deliberately NOT bundled:
+    # the recorder and trainer are development tools and must not ship.
+    ("models", "models"),
 ] + collect_data_files("mediapipe")
 
 a = Analysis(

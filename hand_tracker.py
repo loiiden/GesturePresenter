@@ -16,8 +16,9 @@ import pyautogui
 from gestures import (
     Gesture, GestureClassifier, GestureStateMachine, PinchTracker, PalmSwipeTracker,
     ScrollTracker,
-    INDEX_TIP, is_open_palm, is_fist,
+    INDEX_TIP, is_open_palm,
 )
+import gesture_model
 import actions
 from config import AppConfig
 from devices import display_rects
@@ -37,6 +38,9 @@ MODEL_URL  = (
 )
 
 SMOOTH             = 0.35  # pointer smoothing
+# Open-palm probability accepted by the swipe tracker. Deliberately below the
+# model's own decision threshold: swiping favours recall, see the call site.
+SWIPE_PALM_CONFIDENCE = 0.35
 PALM_HOLD_FRAMES   = 24    # deliberate left-palm hold toggles presentation controls
 FIST_HOLD_FRAMES   = 15    # left-hand frames needed to start/stop recording
 
@@ -55,7 +59,6 @@ FINGERTIP_IDS = {4, 8, 12, 16, 20}
 
 GESTURE_COLORS = {
     Gesture.PINCH:            (0, 140, 255),
-    Gesture.PINCH_DRAG:       (0, 200, 255),
     Gesture.PINCH_RIGHT:      (100, 0, 255),
     Gesture.POINT:            (0, 80, 255),
     Gesture.V_SIGN:           (255, 120, 40),
@@ -66,6 +69,24 @@ GESTURE_COLORS = {
     Gesture.FIST_THUMB_RIGHT: (255, 200, 0),
     Gesture.FIST_THUMB_UP:    (0, 255, 80),
 }
+
+
+class _RuleClassifier:
+    """Adapts the original geometric classifier to the learned one's signature.
+
+    Keeping one call shape means the tracking loop below has a single code path
+    whether or not a trained model is installed.
+    """
+
+    def __init__(self):
+        self._inner = GestureClassifier()
+        self.network = None
+
+    def classify(self, landmarks, world_landmarks=None, aspect: float = 1.0):
+        return self._inner.classify(landmarks)
+
+    def reset(self) -> None:
+        self._inner = GestureClassifier()
 
 
 def get_display_rect(index: int) -> tuple[int, int, int, int]:
@@ -113,7 +134,7 @@ def draw_hand(frame, lms, active_gesture: Gesture):
         cv2.circle(frame, (x, y), r, c, -1, cv2.LINE_AA)
 
 
-def draw_hud(frame, gesture: Gesture, pinch_dragging: bool,
+def draw_hud(frame, gesture: Gesture,
              controls_enabled: bool, last_action: str):
     h, w = frame.shape[:2]
     mode_color = (0, 220, 120) if controls_enabled else (80, 80, 255)
@@ -126,8 +147,6 @@ def draw_hud(frame, gesture: Gesture, pinch_dragging: bool,
         cv2.putText(frame, last_action, ((w - tw) // 2, h - 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 220, 255), 2, cv2.LINE_AA)
     label = gesture.value.replace("_", " ").upper()
-    if gesture == Gesture.PINCH and pinch_dragging:
-        label = "PINCH DRAG"
     if gesture not in (Gesture.NONE,):
         cv2.putText(frame, label, (20, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2,
@@ -239,7 +258,16 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
         min_tracking_confidence=0.7,
     )
 
-    classifier  = GestureClassifier()
+    # The learned classifier is preferred; the original geometric rules remain
+    # as a fallback so a build without a trained model still works.
+    classifiers = gesture_model.load_classifiers()
+    if classifiers is None:
+        right_classifier, left_classifier = _RuleClassifier(), _RuleClassifier()
+        print("No trained gesture model found — using the geometric rules.")
+    else:
+        right_classifier, left_classifier = classifiers
+        print(f"Gesture model loaded: {right_classifier.network.metadata.get('created_at', '?')}")
+
     state_m     = GestureStateMachine()
     pinch_track = PinchTracker()
     swipe_track = PalmSwipeTracker()
@@ -304,18 +332,32 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             result = landmarker.detect_for_video(mp_img, ts_ms)
 
             # ── Separate hands by handedness ──────────────────────────
+            # Aspect is needed because MediaPipe normalizes x by width and y by
+            # height separately; the feature extractor undoes that so the model
+            # behaves the same on 16:9 and 4:3 cameras.
+            frame_h, frame_w = frame.shape[:2]
+            aspect = frame_w / frame_h if frame_h else 1.0
             right_lms = left_lms = None
+            right_world = left_world = None
             for i, hand_lms in enumerate(result.hand_landmarks):
                 label = result.handedness[i][0].category_name
+                world = (result.hand_world_landmarks[i]
+                         if i < len(result.hand_world_landmarks) else None)
                 # MediaPipe handedness labels reverse in the mirrored frame.
                 controls_right_hand = label == "Left"
                 if controls_right_hand:
-                    right_lms = hand_lms
+                    right_lms, right_world = hand_lms, world
                 else:
-                    left_lms = hand_lms
+                    left_lms, left_world = hand_lms, world
 
             # ── Left hand: deliberate safety lock ─────────────────────
-            if left_lms and is_open_palm(left_lms):
+            left_gesture = Gesture.NONE
+            if left_lms:
+                left_gesture, _ = left_classifier.classify(left_lms, left_world, aspect)
+            else:
+                left_classifier.reset()
+
+            if left_gesture == Gesture.OPEN_PALM:
                 left_palm_count = min(left_palm_count + 1, PALM_HOLD_FRAMES)
             else:
                 left_palm_count = max(left_palm_count - 1, 0)
@@ -328,7 +370,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             left_palm_held = palm_held
 
             # ── Left hand: fist → start/stop speech recording ─────────
-            if recognizer is not None and left_lms and is_fist(left_lms):
+            if recognizer is not None and left_gesture == Gesture.FIST:
                 left_fist_count = min(left_fist_count + 1, FIST_HOLD_FRAMES)
             else:
                 left_fist_count = max(left_fist_count - 1, 0)
@@ -362,16 +404,22 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             if right_lms:
                 lost_right_frames = 0
                 lms = right_lms
-                raw_gesture, payload = classifier.classify(lms)
+                raw_gesture, payload = right_classifier.classify(lms, right_world, aspect)
                 entered, active, exited = state_m.update(raw_gesture)
 
                 is_pinching  = (raw_gesture == Gesture.PINCH)
                 pos_norm     = payload.get("pos", (lms[INDEX_TIP].x, lms[INDEX_TIP].y))
                 pinch_events = pinch_track.update(is_pinching, pos_norm)
                 palm_pos = (lms[9].x, lms[9].y)
-                # Use palm geometry directly and let the swipe tracker bridge
-                # brief classification gaps caused by motion blur.
-                swipe = swipe_track.update(is_open_palm(lms), palm_pos)
+                # A swipe is judged on a permissive open-palm probability rather
+                # than on the winning class: at swipe speed the palm blurs and
+                # briefly loses the argmax, and the swipe tracker already
+                # bridges short gaps. Actions that must not misfire (black
+                # screen, Mission Control) still go through the strict path.
+                probs = payload.get("probs")
+                palm_open = (probs.get(Gesture.OPEN_PALM.value, 0.0) >= SWIPE_PALM_CONFIDENCE
+                             if probs else is_open_palm(lms))
+                swipe = swipe_track.update(palm_open, palm_pos)
                 scroll_delta = scroll_track.update(
                     raw_gesture == Gesture.TWO_FINGER_SCROLL, pos_norm[1]
                 )
@@ -388,10 +436,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                     actions.move_cursor(int(cx), int(cy))
 
                 for ev in pinch_events if presentation_enabled else ():
-                    # In presentation mode a pinch has no drag/scroll meaning;
-                    # always turn its release into one click. This makes normal
-                    # landmark movement during a pinch harmless.
-                    if ev[0] in ("click", "drag_end"):
+                    if ev[0] == "click":
                         actions.left_click()
                         last_action, last_action_until = "CLICK", time.monotonic() + 1.0
 
@@ -439,6 +484,9 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 lost_right_frames += 1
                 if lost_right_frames >= 3:
                     pinch_track.reset()
+                    # Drop the smoothed probabilities too, so a gesture held
+                    # before the hand left frame cannot resume on re-entry.
+                    right_classifier.reset()
 
             # ── Draw overlays and show the window ──────────────────────
             active_gesture = active or (entered if entered else Gesture.NONE) \
@@ -448,8 +496,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             if left_lms:
                 draw_hand(frame, left_lms, Gesture.NONE)
             visible_action = last_action if time.monotonic() < last_action_until else ""
-            draw_hud(frame, active_gesture, pinch_track.is_dragging,
-                     presentation_enabled, visible_action)
+            draw_hud(frame, active_gesture, presentation_enabled, visible_action)
 
             with speech_lock:
                 cur_speech, cur_text = speech_state, pending_text

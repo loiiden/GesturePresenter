@@ -1,0 +1,119 @@
+{
+  "protocol_version": 2,
+  "schema_version": 2,
+  "gestures": [
+    "none",
+    "point",
+    "pinch",
+    "pinch_right",
+    "open_palm",
+    "v_sign",
+    "two_finger_scroll",
+    "fist",
+    "fist_thumb_up",
+    "fist_thumb_left",
+    "fist_thumb_right"
+  ],
+  "actions": {
+    "none": "no action",
+    "point": "move the pointer",
+    "pinch": "left click",
+    "pinch_right": "right click",
+    "open_palm": "swipe horizontally to change slide",
+    "v_sign": "Mission Control",
+    "two_finger_scroll": "scroll",
+    "fist": "black screen",
+    "fist_thumb_up": "play / pause",
+    "fist_thumb_left": "no action - recorded so a thumb-out fist is not mistaken for a fist",
+    "fist_thumb_right": "no action - recorded so a thumb-out fist is not mistaken for a fist"
+  },
+  "instructions": {
+    "none": "Relax. Move your hand naturally, rest it, gesture while talking, reach for the keyboard - anything that is NOT a command pose. Include a few slow thumb-toward-index movements that stop short of touching. Vary it every repetition.",
+    "point": "Extend the index finger only. IMPORTANT: vary your thumb every repetition - sometimes stuck right out, sometimes tucked in, and sometimes moved close to the index finger WITHOUT touching it. That last variant is the one that teaches the model where a pinch begins.",
+    "pinch": "Touch the thumb tip to the index fingertip - they must actually make contact. Middle, ring and pinky loosely curled.",
+    "pinch_right": "Touch the thumb tip to the MIDDLE fingertip while keeping the index finger clearly extended.",
+    "open_palm": "All five fingers extended and spread. Move the palm slowly side to side while recording.",
+    "v_sign": "Index and middle extended in a WIDE V. Ring and pinky curled, thumb tucked.",
+    "two_finger_scroll": "Index and middle extended and held TOGETHER, touching. Move slowly up and down while recording.",
+    "fist": "Closed fist with the thumb tucked across the front of the fingers, not sticking out.",
+    "fist_thumb_up": "Closed fist with the thumb extended straight UP.",
+    "fist_thumb_left": "Closed fist with the thumb extended sideways to the LEFT.",
+    "fist_thumb_right": "Closed fist with the thumb extended sideways to the RIGHT."
+  },
+  "conditions": [
+    {
+      "id": "normal",
+      "label": "Normal",
+      "instruction": "Sit at your usual presenting distance.",
+      "repetitions": 5
+    },
+    {
+      "id": "near",
+      "label": "Close to camera",
+      "instruction": "Move closer.",
+      "repetitions": 3,
+      "span_ratio": [
+        1.4,
+        3.0
+      ]
+    },
+    {
+      "id": "far",
+      "label": "Far from camera",
+      "instruction": "Move back.",
+      "repetitions": 3,
+      "span_ratio": [
+        0.35,
+        0.72
+      ]
+    },
+    {
+      "id": "tilted",
+      "label": "Rotated hand",
+      "instruction": "Rotate your wrist. Change the tilt each time.",
+      "repetitions": 3
+    },
+    {
+      "id": "offcentre",
+      "label": "Off-centre",
+      "instruction": "Move your hand to a corner of the frame.",
+      "repetitions": 2,
+      "target_margin_max": 0.1
+    }
+  ],
+  "left_hand": {
+    "enabled": true,
+    "gestures": [
+      "open_palm",
+      "fist",
+      "none"
+    ],
+    "conditions": [
+      "normal",
+      "near",
+      "far"
+    ],
+    "repetitions": 2,
+    "note": "The product reads only open_palm (controls lock) and fist (voice recording) from the left hand. These trials are a held-out check that mirroring right-hand training data into the left hand's frame actually holds."
+  },
+  "timing": {
+    "countdown_seconds": 2.0,
+    "record_seconds": 1.5,
+    "rest_seconds": 0.8
+  },
+  "quality": {
+    "min_handedness_score": 0.75,
+    "_min_edge_margin_note": "Deliberately just above zero. The gate exists to reject hands clipped by the frame edge, where MediaPipe extrapolates landmarks that were never observed. A larger value would fight the offcentre condition, which asks for exactly that placement.",
+    "min_edge_margin": 0.005,
+    "min_hand_span": 0.07,
+    "max_hand_span": 0.9,
+    "min_frames": 12
+  },
+  "gate": {
+    "hold_seconds": 0.8,
+    "_note": "A block starts only after the measured position stays inside its target band for this long. Targets are ratios of the operator's own normal-distance span, calibrated from the first block, because absolute spans are not reachable on every camera."
+  },
+  "notes": {
+    "contact_zone": "point and none deliberately include poses where the thumb approaches the index finger without contact. S01 and S02 contained no such examples, leaving an unlabelled gap between a closed pinch (max 0.69 normalized) and an open point (min 1.02) - exactly the zone a hand crosses on the way to a pinch, where the model's behaviour was therefore arbitrary."
+  }
+}
