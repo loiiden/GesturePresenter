@@ -29,10 +29,43 @@ Windows, or Linux and restored the next time the app starts.
 | Right | Held fist | Toggle black screen |
 | Right | Thumb up | Play/pause media |
 | Right | Held V sign | Mission Control/task overview |
+| **Left** | **Thumb + index pinch and release** | **Left click — same as the right hand** |
 | Left | Held open palm | Lock/unlock gesture controls |
 | Left | Hold fist and speak, then release | Transcribe and paste automatically |
 
+Either hand can click. Pinching with the pointing hand moves the index fingertip
+— the landmark the pointer follows — so the cursor drifts as you click.
+Pinching with the left hand instead leaves the pointer where you aimed it.
+Pinching with both at once is still one click.
+
+A pinch requires the fingertips to actually touch, so bringing the thumb near
+the finger without contact does not click.
+
 Press `L` to lock or unlock controls from the keyboard.
+
+## Gesture recognition
+
+Poses are classified by a small neural network trained on recorded hand
+landmarks, not by hand-written geometric rules. On a recording session held out
+of training entirely it reaches 0.99 trial accuracy, against 0.80 for the rules
+it replaced; the largest gains are on "no gesture" and on thumb-out fists, the
+two cases where the old rules misfired into unwanted actions.
+
+Recognition is designed to survive a change of room and camera:
+
+- **Camera shape** is corrected, because MediaPipe scales x by frame width and y
+  by frame height separately, stretching a hand by ~1.78x on a 16:9 camera.
+- **Distance from the camera** cancels out exactly: coordinates are scaled by
+  the palm's own size, which does not change as fingers move.
+- **Both hands share one model.** A left hand is mirrored into the right hand's
+  frame before classification.
+
+The model ships as a 129 KB file read with NumPy, so the application does not
+depend on any machine-learning framework at runtime.
+
+Recording your own gestures and retraining are development tasks, documented
+separately in [`research/README.md`](research/README.md). Nothing in `research/`
+is part of the installed application.
 
 ## Install and run (from source)
 
@@ -193,7 +226,7 @@ already exist:
 
 ```bash
 git status
-git push origin desktop-app
+git push origin main
 git tag -a v0.1.1 -m "Gesture Presenter v0.1.1"
 git push origin v0.1.1
 ```
@@ -220,64 +253,31 @@ gh run watch
 A manually dispatched workflow uploads artifacts but does not create a public
 release. Tagged workflows do both.
 
-### Build locally on macOS
+### Build locally
 
-Use Python 3.10–3.12. Build dependencies are developer-only; end users do not
-need Python. Work from a clone of the repository (see *Run from source* above),
-then from the project directory:
-
-```bash
-python3.11 -m venv .build-venv
-source .build-venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install ".[voice,build]"
-pyinstaller --clean --noconfirm GesturePresenter.spec
-
-rm -rf dist/dmg
-mkdir -p dist/dmg
-cp -R "dist/Gesture Presenter.app" dist/dmg/
-ln -s /Applications dist/dmg/Applications
-hdiutil create -size 300m -fs HFS+ \
-  -volname "Gesture Presenter" \
-  -srcfolder dist/dmg \
-  -ov -format UDZO \
-  "dist/Gesture-Presenter-macOS.dmg"
-```
-
-The result is `dist/Gesture-Presenter-macOS.dmg`.
-
-### Build locally on Windows
-
-Install Python 3.11 and [Inno Setup](https://jrsoftware.org/isinfo.php), then run
-PowerShell from the project directory:
-
-```powershell
-py -3.11 -m venv .build-venv
-.\.build-venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install ".[voice,build]"
-pyinstaller --clean --noconfirm GesturePresenter.spec
-iscc packaging\windows\GesturePresenter.iss
-```
-
-The result is `dist\Gesture-Presenter-Windows-Setup.exe`.
-
-### Build locally on Linux
-
-Install Python development tools and the WebKitGTK packages required by
-pywebview. Package names vary by distribution. Build the executable first:
+Building locally is for testing a change before tagging; releases should come
+from the workflow above, which builds all three platforms from one revision.
+Use Python 3.10–3.12 and work from a clone. An installer must be built **on** its
+target OS — a Windows installer cannot be produced from macOS.
 
 ```bash
 python3.11 -m venv .build-venv
-source .build-venv/bin/activate
+source .build-venv/bin/activate          # Windows: .\.build-venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install ".[voice,build]"
+python -m pip install ".[voice,build]"   # Linux: ".[voice,gui-qt,build]"
 pyinstaller --clean --noconfirm GesturePresenter.spec
 ```
 
-The AppImage layout and `appimagetool` commands are defined in the Linux section
-of `.github/workflows/build-app.yml`; running the workflow is the supported way
-to produce `Gesture-Presenter-Linux-x86_64.AppImage` consistently.
+That produces the application in `dist/`. To wrap it in a distributable package:
+
+- **macOS** — copy `dist/Gesture Presenter.app` and a symlink to `/Applications`
+  into a staging folder, then `hdiutil create -srcfolder <folder> -format UDZO
+  -volname "Gesture Presenter" dist/Gesture-Presenter-macOS.dmg`.
+- **Windows** — install [Inno Setup](https://jrsoftware.org/isinfo.php) and run
+  `iscc packaging\windows\GesturePresenter.iss`.
+- **Linux** — the AppImage layout and `appimagetool` invocation live in the Linux
+  job of `.github/workflows/build-app.yml`; running that workflow is the
+  supported way to produce the AppImage consistently.
 
 ### Icons, signing, and permissions
 
