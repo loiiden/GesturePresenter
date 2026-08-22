@@ -86,7 +86,8 @@
     "gestures": [
       "open_palm",
       "fist",
-      "none"
+      "none",
+      "pinch"
     ],
     "conditions": [
       "normal",
@@ -94,7 +95,7 @@
       "far"
     ],
     "repetitions": 2,
-    "note": "The product reads only open_palm (controls lock) and fist (voice recording) from the left hand. These trials are a held-out check that mirroring right-hand training data into the left hand's frame actually holds."
+    "note": "The product reads open_palm (controls lock), fist (voice recording) and pinch (click) from the left hand. These trials are a held-out check that mirroring right-hand training data into the left hand's frame actually holds. pinch matters most: a tucked-thumb fist and a pinch sit at nearly the same thumb-index distance, so only the model separates the click gesture from the voice gesture on this hand."
   },
   "timing": {
     "countdown_seconds": 2.0,
