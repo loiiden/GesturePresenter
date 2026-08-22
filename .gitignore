@@ -16,11 +16,9 @@ __pycache__/
 .vscode/
 .DS_Store
 
-# Application builds
+# Python build artifacts (from `pip install .` / `uv build`)
 build/
 dist/
-*.dmg
-*.AppImage
 
 # Recorded datasets. Landmarks are still biometric-adjacent personal data and
 # are large; keep them local. The trained model in models/ IS committed, since

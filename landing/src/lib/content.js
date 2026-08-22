@@ -2,37 +2,18 @@
 
 export const REPO = 'https://github.com/loiiden/GesturePresenter';
 
-// Root of your own download server (the VPS behind this domain). Installers are
-// served from `${DOWNLOAD_BASE}/latest/<file>` and a small `latest.json`
-// manifest lives at `${DOWNLOAD_BASE}/latest.json`. Change this to your domain.
-export const DOWNLOAD_BASE = 'https://loiiden.de';
-
-// Stable asset names. These are the fallback links used when the manifest can't
-// be fetched, so downloads keep working even before latest.json exists.
+// Supported platforms. There are no prebuilt downloads: the app is installed
+// from source with uv, which fetches a compatible Python itself. These entries
+// only drive the platform picker and the commands it shows.
 export const platforms = [
-  {
-    id: 'mac',
-    name: 'macOS',
-    file: 'Gesture-Presenter-macOS.dmg',
-    note: 'Universal · macOS 12 or later',
-  },
-  {
-    id: 'windows',
-    name: 'Windows',
-    file: 'Gesture-Presenter-Windows-Setup.exe',
-    note: 'Installer · Windows 10 or later',
-  },
-  {
-    id: 'linux',
-    name: 'Linux',
-    file: 'Gesture-Presenter-Linux-x86_64.AppImage',
-    note: 'AppImage · x86_64',
-  },
+  { id: 'mac', name: 'macOS', note: 'macOS 12 or later' },
+  { id: 'windows', name: 'Windows', note: 'Windows 10 or later' },
+  { id: 'linux', name: 'Linux', note: 'x86_64 · Xorg session' },
 ];
 
 export const gestures = [
   { gesture: 'Point index finger', action: 'Move the on-screen pointer' },
-  { gesture: 'Pinch thumb + index', action: 'Left click' },
+  { gesture: 'Pinch thumb + index', action: 'Left click (either hand)' },
   { gesture: 'Pinch thumb + middle', action: 'Right click' },
   { gesture: 'Two fingers, move up/down', action: 'Scroll the page' },
   { gesture: 'Open-palm swipe', action: 'Previous / next slide' },

@@ -10,4 +10,3 @@ RUN npm run build
 FROM caddy:2-alpine
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv/site
-# Installers are provided at runtime via a read-only volume at /srv/downloads.

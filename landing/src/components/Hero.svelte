@@ -1,6 +1,5 @@
 <script>
   import { platforms, REPO } from '../lib/content.js';
-  import { release } from '../lib/downloads.svelte.js';
   import PlatformIcon from './PlatformIcon.svelte';
 
   let { os } = $props();
@@ -33,8 +32,7 @@
   </div>
 
   <p class="meta">
-    Free and open source · macOS · Windows · Linux{#if release.version}
-      · v{release.version}{/if}
+    Free and open source · macOS · Windows · Linux
   </p>
 </header>
 

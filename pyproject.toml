@@ -33,7 +33,6 @@ voice = [
 # a plain venv or uv-managed Python can't import) or Qt. Qt is fully pip-installable
 # inside the environment, so it's the reliable choice for running from source.
 gui-qt = ["qtpy>=2.4", "PyQt6>=6.6", "PyQt6-WebEngine>=6.6"]
-build = ["pyinstaller>=6.8"]
 # Development-only: recording datasets and training the gesture model. The
 # shipped application reads the exported .npz with NumPy alone, so scikit-learn
 # is never a runtime dependency and its pickle-compatibility caveats do not

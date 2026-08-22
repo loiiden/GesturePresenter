@@ -1,9 +1,9 @@
 # Gesture model: recording, training, shipping
 
-Everything in this directory is a **development tool**. None of it is packaged
-into the application — `pyproject.toml` omits it from `py-modules`, and
-`GesturePresenter.spec` bundles only `models/`. The recorder is here so gestures
-can be captured easily, not as a user-facing feature.
+Everything in this directory is a **development tool**. None of it is installed
+with the application — `pyproject.toml` omits it from `py-modules` and from the
+packaged data files. The recorder is here so gestures can be captured easily,
+not as a user-facing feature.
 
 What ships is three files at the repository root:
 

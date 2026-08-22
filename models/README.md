@@ -13,6 +13,6 @@ uv run --extra research python -m research.train research/data/gestures.csv \
 ```
 
 Until then `hand_tracker.py` falls back to the geometric rules in `gestures.py`
-and prints that it has done so. Packaging (`pip install .` or PyInstaller) will
-fail while the file is missing, which is intended — it prevents shipping a build
-that silently runs on the fallback rules instead of the trained model.
+and prints that it has done so. Installing (`uv tool install` / `pip install .`)
+will fail while the file is missing, which is intended — it prevents shipping an
+install that silently runs on the fallback rules instead of the trained model.

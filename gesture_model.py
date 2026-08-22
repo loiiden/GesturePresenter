@@ -38,9 +38,8 @@ from gesture_features import (
 )
 from gestures import Gesture
 
-_BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", os.path.dirname(__file__)))
 MODEL_CANDIDATES = (
-    _BUNDLE_DIR / "models" / "gesture_mlp.npz",
+    Path(os.path.dirname(__file__)) / "models" / "gesture_mlp.npz",
     Path(sys.prefix) / "gesture_presenter" / "gesture_mlp.npz",
 )
 

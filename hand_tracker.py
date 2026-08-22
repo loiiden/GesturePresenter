@@ -25,9 +25,8 @@ from devices import display_rects
 
 pyautogui.FAILSAFE = False
 
-_BUNDLE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
 _MODEL_CANDIDATES = (
-    os.path.join(_BUNDLE_DIR, "hand_landmarker.task"),
+    os.path.join(os.path.dirname(__file__), "hand_landmarker.task"),
     os.path.join(sys.prefix, "gesture_presenter", "hand_landmarker.task"),
 )
 MODEL_PATH = next((path for path in _MODEL_CANDIDATES if os.path.exists(path)),

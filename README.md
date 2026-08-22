@@ -207,86 +207,28 @@ with `--system-site-packages` plus
 `sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1`
 — but the venv's Python must match the system version, so Qt is the simpler path.
 
-## Building and releasing installers
+## Releasing
 
-An installer must be built on its target operating system. Do not build a
-Windows installer or Linux AppImage from macOS. The recommended approach is the
-included GitHub Actions matrix, which runs the same revision on macOS, Windows,
-and Linux.
+There are no prebuilt installers. Users install from the repository with `uv`,
+which builds and isolates the environment on their machine, so a release is just
+a commit on `main` — no signing, no per-platform packaging, and no version to
+keep in step across files.
 
-### Build all platforms with GitHub Actions
-
-Before publishing a version, update the version in both:
-
-- `pyproject.toml` (`project.version`)
-- `packaging/windows/GesturePresenter.iss` (`AppVersion`)
-
-Commit and push those changes. Then create a new tag; use a version that does not
-already exist:
+To publish a change, push to `main`. Existing installations update with:
 
 ```bash
-git status
-git push origin main
+uv tool upgrade gesture-presenter
+```
+
+Tag a version when you want a fixed reference point:
+
+```bash
 git tag -a v0.1.1 -m "Gesture Presenter v0.1.1"
 git push origin v0.1.1
 ```
 
-Pushing a `v*` tag starts `.github/workflows/build-app.yml`. It builds on three
-native runners and publishes these files to the matching GitHub Release:
+Users can then pin that tag by appending `@v0.1.1` to the git URL. Keep
+`project.version` in `pyproject.toml` in step with any tag you create.
 
-- `Gesture-Presenter-macOS.dmg`
-- `Gesture-Presenter-Windows-Setup.exe`
-- `Gesture-Presenter-Linux-x86_64.AppImage`
-
-Open the repository's **Actions → Build desktop application** page to monitor the
-jobs. Each operating-system package is also available as a workflow artifact.
-
-To test all builds without creating a release, use **Run workflow** on that page,
-or run this with the GitHub CLI:
-
-```bash
-gh workflow run build-app.yml
-gh run list --workflow=build-app.yml --limit=1
-gh run watch
-```
-
-A manually dispatched workflow uploads artifacts but does not create a public
-release. Tagged workflows do both.
-
-### Build locally
-
-Building locally is for testing a change before tagging; releases should come
-from the workflow above, which builds all three platforms from one revision.
-Use Python 3.10–3.12 and work from a clone. An installer must be built **on** its
-target OS — a Windows installer cannot be produced from macOS.
-
-```bash
-python3.11 -m venv .build-venv
-source .build-venv/bin/activate          # Windows: .\.build-venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install ".[voice,build]"   # Linux: ".[voice,gui-qt,build]"
-pyinstaller --clean --noconfirm GesturePresenter.spec
-```
-
-That produces the application in `dist/`. To wrap it in a distributable package:
-
-- **macOS** — copy `dist/Gesture Presenter.app` and a symlink to `/Applications`
-  into a staging folder, then `hdiutil create -srcfolder <folder> -format UDZO
-  -volname "Gesture Presenter" dist/Gesture-Presenter-macOS.dmg`.
-- **Windows** — install [Inno Setup](https://jrsoftware.org/isinfo.php) and run
-  `iscc packaging\windows\GesturePresenter.iss`.
-- **Linux** — the AppImage layout and `appimagetool` invocation live in the Linux
-  job of `.github/workflows/build-app.yml`; running that workflow is the
-  supported way to produce the AppImage consistently.
-
-### Icons, signing, and permissions
-
-The source icon is `assets/icon.png`. Generated `icon.icns`, `icon.ico`, and the
-512 px Linux icon are committed so CI builds are reproducible.
-
-Current local builds are ad-hoc/unsigned. macOS may invalidate Accessibility
-permission after each rebuild because the app's code hash changes. Before public
-distribution, sign with an Apple Developer ID and notarize the app and DMG.
-Windows releases should likewise be Authenticode-signed to avoid SmartScreen
-warnings. Signing certificates and secrets must be configured separately in the
-CI environment; they must never be committed to the repository.
+The landing site deploys separately via `.github/workflows/deploy-site.yml`; see
+[`landing/DEPLOY.md`](landing/DEPLOY.md).

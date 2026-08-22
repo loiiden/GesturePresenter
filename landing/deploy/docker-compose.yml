@@ -1,6 +1,6 @@
 # Runs on the VPS. The site container is built and pushed by the
-# "Deploy landing site" GitHub Action; installers live in the host directory
-# /srv/downloads (populated by the build workflow) and are mounted read-only.
+# "Deploy landing site" GitHub Action. The site is fully self-contained: the app
+# is installed from source with uv, so no installer files are hosted.
 services:
   web:
     image: gp-site:latest
@@ -13,7 +13,6 @@ services:
       SITE_DOMAIN: loiiden.de
       ACME_EMAIL: you@loiiden.de   # <-- set a real address for Let's Encrypt
     volumes:
-      - /srv/downloads:/srv/downloads:ro
       - caddy_data:/data       # persisted TLS certificates
       - caddy_config:/config
 

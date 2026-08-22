@@ -1,6 +1,5 @@
 <script>
   import { platforms, REPO } from '../lib/content.js';
-  import { urlFor, sizeFor, release } from '../lib/downloads.svelte.js';
   import PlatformIcon from './PlatformIcon.svelte';
 
   let { os } = $props();
@@ -191,33 +190,6 @@
     </div>
   </div>
 
-  <div class="builds">
-    <div class="build-copy">
-      <span class="warning-icon">!</span>
-      <div>
-        <h3>Prefer a ready-made app?</h3>
-        <p>
-          Prebuilt files are available, but they are <strong>not code-signed</strong>.
-          Your operating system may show a security warning. Installing with uv is recommended.
-        </p>
-      </div>
-    </div>
-
-    <div class="build-cards">
-      {#each platforms as platform}
-        <a href={urlFor(platform.id)}>
-          <PlatformIcon id={platform.id} size={20} />
-          <span><b>{platform.name}</b><small>{sizeFor(platform.id) || platform.note}</small></span>
-          <em>Unsigned download ↓</em>
-        </a>
-      {/each}
-    </div>
-
-    <p class="release-note">
-      {#if release.version}Prebuilt release v{release.version} · {/if}
-      Files are also available on <a href={`${REPO}/releases`} target="_blank" rel="noreferrer">GitHub Releases</a>.
-    </p>
-  </div>
 </section>
 
 <style>
@@ -461,67 +433,9 @@
     font-size: 11px;
     white-space: normal;
   }
-  .builds {
-    margin-top: 34px;
-    padding: 26px;
-    border: 1px solid #eadfca;
-    border-radius: 22px;
-    background: #fffaf0;
-  }
-  .build-copy { display: flex; align-items: flex-start; gap: 14px; }
-  .warning-icon {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 27px;
-    height: 27px;
-    border-radius: 50%;
-    background: #f1d59d;
-    color: #6f4d0d;
-    font-size: 13px;
-    font-weight: 750;
-  }
-  h3 { font-size: 17px; letter-spacing: -0.015em; }
-  .build-copy p {
-    margin-top: 6px;
-    color: #76684e;
-    font-size: 13px;
-    line-height: 1.5;
-  }
-  .build-copy strong { color: #4e3c1c; }
-  .build-cards {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 9px;
-    margin-top: 20px;
-  }
-  .build-cards a {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    gap: 10px;
-    padding: 14px;
-    border: 1px solid #e7d9bd;
-    border-radius: 13px;
-    background: rgba(255,255,255,0.7);
-    transition: background 0.15s, transform 0.15s;
-  }
-  .build-cards a:hover { background: #fff; transform: translateY(-1px); }
-  .build-cards span b, .build-cards span small { display: block; }
-  .build-cards span b { font-size: 13px; }
-  .build-cards span small { margin-top: 2px; color: #88795d; font-size: 10px; }
-  .build-cards em {
-    grid-column: 1 / -1;
-    color: #67542e;
-    font-size: 11px;
-    font-style: normal;
-    font-weight: 600;
-  }
-  .release-note { margin-top: 16px; color: #88795d; font-size: 11px; }
-  .release-note a { color: #4e3c1c; text-decoration: underline; text-underline-offset: 2px; }
 
   @media (max-width: 760px) {
-    .platform-picker, .build-cards { grid-template-columns: 1fr; }
+    .platform-picker { grid-template-columns: 1fr; }
     .edition-picker { grid-template-columns: 1fr; }
     .command-row { grid-template-columns: 1fr auto; gap: 4px 12px; padding: 17px; }
     .command-meta { grid-column: 1 / -1; }
@@ -532,7 +446,6 @@
   @media (max-width: 460px) {
     .wrap { padding-left: 16px; padding-right: 16px; }
     .picker-block, .edition-block, .commands-block { padding: 22px 18px; }
-    .builds { padding: 20px 17px; }
     code { font-size: 10.5px; }
   }
 </style>

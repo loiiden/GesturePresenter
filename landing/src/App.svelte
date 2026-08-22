@@ -6,10 +6,8 @@
   import Downloads from './components/Downloads.svelte';
   import Footer from './components/Footer.svelte';
   import { detectOS } from './lib/os.js';
-  import { loadLatest } from './lib/downloads.svelte.js';
 
   const os = detectOS();
-  loadLatest();
 </script>
 
 <Nav />
