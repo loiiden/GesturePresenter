@@ -176,8 +176,8 @@ class IntegrationTests(unittest.TestCase):
         _, lp = left.classifier.classify(landmarks(mirrored_image), landmarks(mirrored_world), 16/9)
         np.testing.assert_allclose(list(rp['probs'].values()), list(lp['probs'].values()), atol=1e-6)
 
-    def test_default_is_full_mode(self):
-        self.assertFalse(AppConfig().simple_mode)
+    def test_default_is_simple_mode(self):
+        self.assertTrue(AppConfig().simple_mode)
 
     def test_packaged_model_and_controller_cancel_on_disabled(self):
         controller = SimpleModeController()

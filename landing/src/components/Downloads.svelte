@@ -51,11 +51,10 @@
 
 <section id="download" class="wrap">
   <div class="head">
-    <span class="eyebrow">Recommended installation</span>
-    <h2>Set up Gesture Presenter.</h2>
+    <span class="eyebrow">Make your next presentation hands-free</span>
+    <h2>Ready for your next slide?</h2>
     <p>
-      Install from the source repository with <strong>uv</strong>. Choose your system and whether
-      you want local voice transcription; the commands update automatically.
+      Choose your computer, copy the commands, and you’re ready to go.
     </p>
   </div>
 
@@ -221,7 +220,6 @@
     font-size: 18px;
     line-height: 1.55;
   }
-  .head strong { color: var(--ink); }
   .installer {
     margin-top: 46px;
     border: 1px solid var(--line);
@@ -368,15 +366,15 @@
   }
   .lifecycle + .lifecycle { margin-top: 0; }
   .lifecycle summary {
-    width: fit-content;
-    padding-top: 16px;
+    padding: 16px 0;
+    line-height: 1.5;
     color: var(--ink);
     cursor: pointer;
     font-size: 12.5px;
     font-weight: 600;
   }
   .lifecycle-content {
-    padding-top: 12px;
+    padding: 0 0 16px;
   }
   .lifecycle-content > p {
     max-width: 680px;

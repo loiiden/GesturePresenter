@@ -53,3 +53,6 @@ img {
   background: var(--black);
   color: var(--white);
 }
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+a:focus-visible, button:focus-visible { outline: 3px solid #64845e; outline-offset: 5px; }

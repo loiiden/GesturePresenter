@@ -5,8 +5,8 @@
 <section id="how" class="band">
   <div class="wrap">
     <div class="head">
-      <h2>Running in under a minute.</h2>
-      <p>The camera stays off until you press Start. Your video never leaves the machine.</p>
+      <h2>Start presenting in three steps.</h2>
+      <p>Simple mode is ready by default. Choose a camera, start tracking, then pinch and release. Video is processed on your computer.</p>
     </div>
 
     <ol class="steps">
@@ -48,7 +48,7 @@
   }
   .steps {
     list-style: none;
-    margin: 52px 0 0;
+    margin: 42px 0 0;
     padding: 0;
     display: grid;
     grid-template-columns: repeat(3, 1fr);

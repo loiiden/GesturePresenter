@@ -12,7 +12,7 @@
     <div class="links">
       <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
       <a href={`${REPO}/releases`} target="_blank" rel="noreferrer">Releases</a>
-      <a href={`${REPO}#readme`} target="_blank" rel="noreferrer">Docs</a>
+      <a href="#guide" target="_blank" rel="noreferrer">How to use</a>
     </div>
     <span class="copy">© {year} · Open source</span>
   </div>

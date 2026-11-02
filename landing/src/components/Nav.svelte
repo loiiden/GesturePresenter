@@ -4,14 +4,13 @@
 
 <nav>
   <div class="inner">
-    <a class="brand" href="#top">
+    <a class="brand" href="#home">
       <img src="./icon.png" alt="" width="26" height="26" />
       <span>Gesture Presenter</span>
     </a>
     <div class="links">
-      <a href="#gestures">Gestures</a>
-      <a href="#how">How it works</a>
-      <a href="#download">Install</a>
+      <a href="#guide">How to use</a>
+      <a class="install" href="#install">Get the app ↓</a>
       <a class="ghub" href={REPO} target="_blank" rel="noreferrer">GitHub ↗</a>
     </div>
   </div>
@@ -60,12 +59,18 @@
   .links a:hover {
     color: var(--ink);
   }
+  .install { background: #1e3328; color: white; padding: 9px 15px; border-radius: 99px; }
+  .links .install:hover { color: white; background: #304f3d; }
   .ghub {
     color: var(--ink);
     font-weight: 500;
   }
+  @media (max-width: 480px) {
+    .links { gap: 14px; }
+    .brand span { display: none; }
+  }
   @media (max-width: 640px) {
-    .links a:not(.ghub) {
+    .links a.ghub {
       display: none;
     }
   }

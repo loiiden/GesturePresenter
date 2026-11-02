@@ -42,7 +42,7 @@ function selectKnown(id, value) {
 
 function apply(config) {
   $('voice').checked = config.voice_enabled;
-  $('simpleMode').checked = Boolean(config.simple_mode);
+  $('simpleMode').checked = Boolean(config.simple_mode ?? true);
   renderMode();
   selectKnown('camera', config.camera_index);
   selectKnown('display', config.display_index);

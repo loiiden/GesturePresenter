@@ -11,16 +11,21 @@ export const platforms = [
   { id: 'linux', name: 'Linux', note: 'x86_64 · Xorg session' },
 ];
 
+export const simpleGestures = [
+  { hand: 'Right hand', gesture: 'Pinch thumb + index, then release', action: 'Next slide' },
+  { hand: 'Left hand', gesture: 'Pinch thumb + index, then release', action: 'Previous slide' },
+];
+
 export const gestures = [
-  { gesture: 'Point index finger, thumb tucked', action: 'Move the on-screen pointer' },
-  { gesture: 'Index straight + thumb out sideways', action: 'Left click on release (either hand)' },
-  { gesture: 'Two fingers, move up/down', action: 'Scroll the page' },
+  { gesture: 'Point with index finger, thumb relaxed', action: 'Move the pointer' },
+  { gesture: 'Index straight + thumb out sideways', action: 'Left click on release' },
+  { gesture: 'Two fingers together, move up/down', action: 'Scroll' },
   { gesture: 'Open-palm swipe', action: 'Previous / next slide' },
-  { gesture: 'Hold a fist', action: 'Toggle a black screen' },
+  { gesture: 'Hold a fist', action: 'Toggle black screen' },
   { gesture: 'Thumb up', action: 'Play or pause media' },
   { gesture: 'Hold a V sign', action: 'Open task overview' },
   { gesture: 'Left open palm', action: 'Lock or unlock controls' },
-  { gesture: 'Left fist + speak', action: 'Transcribe and paste your voice' },
+  { gesture: 'Left fist + speak', action: 'Transcribe and paste speech (voice edition)' },
 ];
 
 export const steps = [
@@ -37,6 +42,6 @@ export const steps = [
   {
     n: '03',
     title: 'Present hands-free',
-    body: 'Point, click, swipe, and speak. Step away from the keyboard and command the room.',
+    body: 'Pinch with your right hand for next slide, or your left for previous. Full mode adds pointer, click, scroll, and more.',
   },
 ];

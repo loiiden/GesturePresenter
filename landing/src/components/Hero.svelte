@@ -13,9 +13,9 @@
   <p class="eyebrow">Desktop presentation controller</p>
   <h1>Present with<br />your hands.</h1>
   <p class="lede">
-    Point, click, and swipe to drive your slides — no clicker, no keyboard.
-    Gesture Presenter watches your webcam and turns hand gestures into precise
-    on-screen control.
+    Start with two easy gestures: pinch your right hand for next slide, or your
+    left for previous. Want more control? Switch to Full mode for pointer, click,
+    scroll, and presentation shortcuts.
   </p>
 
   <div class="cta">
