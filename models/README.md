@@ -54,3 +54,22 @@ uv run --extra research python -m research.train research/data/gestures_v3.csv \
 
 After recording G02/G03, use the session holdout command above to measure
 performance on a new sitting. Restart the app after replacing the model.
+
+
+## Simple-mode model
+
+`simple_pinch.npz` is an independent binary classifier for Simple mode, trained
+on right-hand recordings and shared by both hands through mirrored left-hand
+image/world features. Right releases advance; left releases go back. It combines original pinches with fresh `PINCH_V2_01` recordings, using
+all other poses as negative examples. It matches `simple_pinch_combined.npz`.
+`simple_pinch_v2.npz` retains the previous fresh-only candidate;
+`gesture_mlp.npz` is unchanged.
+
+Held-out evaluation: 176/180 trials classify correctly. Runtime replay detects
+5/5 fresh and 16/16 old pinch trials, with no false actions among 159 negative
+trials after adding the geometric release guard. Model weights are unchanged. Fresh trials are held out within a single recording session; this is
+not live or new-session validation. See
+[training and evaluation](../research/README.md#simple-mode-pinch).
+
+Mirrored left-hand replay passes the same 180 trials. This validates feature
+symmetry, not accuracy on separately captured left-hand recordings.

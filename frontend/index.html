@@ -20,10 +20,12 @@
         <label>Camera<select id="camera"></select></label>
         <label>Display<select id="display"></select></label>
 
+        <label class="toggle-row"><span><b>Simple mode</b><small>Right: next · Left: previous · select before starting</small></span><input id="simpleMode" type="checkbox"><i></i></label>
+
         <label id="voiceRow" class="toggle-row"><span><b>Voice transcription</b><small id="voiceHint">Runs locally with Whisper</small></span><input id="voice" type="checkbox"><i></i></label>
 
         <button id="gestureGuideButton" class="gesture-guide-button" type="button">
-          <span><b>Gesture guide</b><small>Right and left hand controls</small></span>
+          <span><b>Gesture guide</b><small id="gestureGuideHint">Right and left hand controls</small></span>
           <em>View all</em>
         </button>
       </aside>
@@ -48,7 +50,15 @@
         <button id="gestureGuideClose" type="button" aria-label="Close gesture guide">×</button>
       </div>
 
-      <div class="gesture-groups">
+      <div id="simpleGuide" hidden>
+        <h3>Simple mode · either hand</h3>
+        <dl>
+          <div><dt>Right hand: pinch thumb + index, then release</dt><dd>Next slide</dd></div>
+          <div><dt>Left hand: pinch thumb + index, then release</dt><dd>Previous slide</dd></div>
+        </dl>
+        <p>Start with your hand open and keep it visible. Use one hand at a time. Holding a pinch does not repeat. Other gesture controls and voice are off.</p>
+      </div>
+      <div id="fullGuide" class="gesture-groups">
         <div class="gesture-group">
           <h3><span>Right</span> Presentation controls</h3>
           <dl>
@@ -65,7 +75,7 @@
         <div class="gesture-group left-hand">
           <h3><span>Left</span> Click, safety and voice</h3>
           <dl>
-            <div><dt>Pinch thumb + index</dt><dd>Left click — the same click as the right hand, but the pointer stays still</dd></div>
+            <div><dt>Index straight + thumb out sideways</dt><dd>Left click on release — keep the right hand pointing</dd></div>
             <div><dt>Hold an open palm</dt><dd>Lock or unlock gesture controls</dd></div>
             <div><dt>Hold a fist and speak</dt><dd>Release to transcribe and paste</dd></div>
           </dl>

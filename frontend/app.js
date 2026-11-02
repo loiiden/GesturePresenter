@@ -10,6 +10,7 @@ let pollTimer;
 
 function values() {
   return {
+    simple_mode: $('simpleMode').checked,
     voice_enabled: $('voice').checked,
     camera_index: Number($('camera').value || 0),
     display_index: Number($('display').value || 0),
@@ -41,8 +42,20 @@ function selectKnown(id, value) {
 
 function apply(config) {
   $('voice').checked = config.voice_enabled;
+  $('simpleMode').checked = Boolean(config.simple_mode);
+  renderMode();
   selectKnown('camera', config.camera_index);
   selectKnown('display', config.display_index);
+}
+
+function renderMode() {
+  const simple = $('simpleMode').checked;
+  $('simpleGuide').hidden = !simple;
+  $('fullGuide').hidden = simple;
+  $('voice').disabled = simple;
+  $('voiceRow').hidden = simple;
+  $('display').disabled = simple;
+  $('gestureGuideHint').textContent = simple ? 'Right pinch: next / Left pinch: previous' : 'Right and left hand controls';
 }
 
 function showError(message) {
@@ -67,6 +80,7 @@ function closeGestureGuide() {
 }
 
 function renderStartButton() {
+  $('simpleMode').disabled = phase !== 'idle' || actionInFlight || !initialized;
   const button = $('startButton');
   const labels = {
     idle: 'Start presentation',
@@ -156,6 +170,7 @@ function bindControls() {
   document.querySelectorAll('select,input').forEach(element => {
     element.addEventListener('change', async () => {
       if (!initialized) return;
+      renderMode();
       try { await window.pywebview.api.save_config(values()); }
       catch (error) { showError(`Could not save settings: ${error.message || error}`); }
     });

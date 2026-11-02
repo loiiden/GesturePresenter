@@ -67,7 +67,7 @@ function frontend(overrides = {}) {
     window,
     document: {
       getElementById: get, createElement: () => element(),
-      querySelector: get, querySelectorAll: () => [get('camera'), get('display'), get('voice')],
+      querySelector: get, querySelectorAll: () => [get('camera'), get('display'), get('voice'), get('simpleMode')],
       addEventListener() {}, body: element(),
     },
     setInterval(callback) { timers.push(callback); return timers.length; },
@@ -181,4 +181,40 @@ test('failed initialization retries configuration and does not start with defaul
   await ui.ready();
   assert.equal(ui.timers.length, 1);
   assert.equal(ui.button.listeners.click.length, 1);
+});
+
+
+test('simple mode restores, submits, shows its guide and locks during tracking', async () => {
+  let submitted;
+  const ui = frontend({ async start_tracking(values) {
+    submitted = values;
+    return { ok: true, phase: 'starting' };
+  }});
+  ui.state.config.simple_mode = true;
+  await ui.ready();
+  assert.equal(ui.get('simpleMode').checked, true);
+  assert.equal(ui.get('simpleGuide').hidden, false);
+  assert.equal(ui.get('fullGuide').hidden, true);
+  assert.equal(ui.get('voice').disabled, true);
+  await ui.click();
+  assert.equal(submitted.simple_mode, true);
+  assert.equal(ui.get('simpleMode').disabled, true);
+  ui.state.phase = 'idle';
+  await ui.poll();
+  assert.equal(ui.get('simpleMode').disabled, false);
+});
+
+test('simple mode toggle saves and restores the full guide when turned off', async () => {
+  let saved;
+  const ui = frontend({async save_config(values) { saved = values; }});
+  await ui.ready();
+  ui.get('simpleMode').checked = true;
+  for (const callback of ui.get('simpleMode').listeners.change) await callback();
+  assert.equal(saved.simple_mode, true);
+  assert.equal(ui.get('fullGuide').hidden, true);
+  ui.get('simpleMode').checked = false;
+  for (const callback of ui.get('simpleMode').listeners.change) await callback();
+  assert.equal(saved.simple_mode, false);
+  assert.equal(ui.get('fullGuide').hidden, false);
+  assert.equal(ui.get('voice').disabled, false);
 });

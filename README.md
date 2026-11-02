@@ -44,6 +44,33 @@ recordings, retaining every other class.
 
 Press `L` to lock or unlock controls from the keyboard.
 
+## Simple mode
+
+Enable **Simple mode** in Setup before starting tracking:
+
+- **Right hand:** pinch thumb and index fingertip, then release → **next slide**.
+- **Left hand:** pinch thumb and index fingertip, then release → **previous slide**.
+
+Each release triggers one action after a 45 ms debounce. There is no double-pinch
+recognition or waiting window: two right-hand pinches advance twice. Start with
+an open hand and keep it visible. Holding a pinch does not repeat. Use one hand
+at a time; opposite commands released on the same frame cancel each other.
+
+The pinching hand's skeleton turns yellow. Pinch is forced off when thumb–index
+separation exceeds 30% of wrist-to-middle-knuckle length (aspect-corrected).
+Tracking loss cancels that hand's pinch. Both hands share model weights; left
+image and world landmarks are mirrored into the right-hand training space.
+Pointer, scroll, other poses, and voice are inactive in this mode. Stop tracking
+to change modes; the choice is saved for the next launch.
+
+The current model combines old and fresh pinch recordings; other poses supply
+negative examples. It classifies 176/180 held-out trials correctly. Runtime
+replay with simulated releases detects 5/5 fresh and 16/16 old pinch trials,
+with no false actions among 159 negative trials after the distance guard. Fresh pinches have only one
+recording session, so their evaluation holds out whole trials within that
+session. This is not live sequence or new-session validation. See
+[the simple-mode workflow](research/README.md#simple-mode-pinch).
+
 ## Gesture recognition
 
 Poses are classified by a small neural network trained on recorded hand

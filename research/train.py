@@ -156,6 +156,11 @@ def export_npz(path: Path, pipeline, labels, config: FeatureConfig, metadata: di
         "feature_config": np.array(json.dumps(config.as_dict())),
     }
     for index, (weight, bias) in enumerate(zip(network.coefs_, network.intercepts_)):
+        # sklearn binary MLP uses one sigmoid logit. Softmax([0, z])
+        # gives exactly the same [1-sigmoid(z), sigmoid(z)] probabilities.
+        if index == len(network.coefs_) - 1 and len(labels) == 2 and weight.shape[1] == 1:
+            weight = np.column_stack((np.zeros_like(weight[:, 0]), weight[:, 0]))
+            bias = np.array([0.0, bias[0]])
         arrays[f"w{index}"] = weight.astype(np.float32)
         arrays[f"b{index}"] = bias.astype(np.float32)
     path.parent.mkdir(parents=True, exist_ok=True)

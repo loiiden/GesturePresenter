@@ -118,10 +118,10 @@ def download_model():
     print("Done.")
 
 
-def draw_hand(frame, lms, active_gesture: Gesture):
+def draw_hand(frame, lms, active_gesture: Gesture, color=None):
     h, w = frame.shape[:2]
     pts  = [(int(lm.x * w), int(lm.y * h)) for lm in lms]
-    conn_color = GESTURE_COLORS.get(active_gesture, (0, 220, 0))
+    conn_color = color if color is not None else GESTURE_COLORS.get(active_gesture, (0, 220, 0))
 
     for a, b in HAND_CONNECTIONS:
         cv2.line(frame, pts[a], pts[b], conn_color, 2, cv2.LINE_AA)
@@ -237,7 +237,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             speech_state = "paste_pending" if pending_text else "idle"
 
     recognizer = None
-    if app_config.voice_enabled:
+    if app_config.voice_enabled and not app_config.simple_mode:
         # Keep Whisper and audio libraries completely out of gesture-only mode.
         from speech import SpeechRecognizer
         recognizer = SpeechRecognizer(
@@ -256,15 +256,21 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
         min_tracking_confidence=0.7,
     )
 
-    # The learned classifier is preferred; the original geometric rules remain
-    # as a fallback so a build without a trained model still works.
-    classifiers = gesture_model.load_classifiers()
-    if classifiers is None:
-        right_classifier, left_classifier = _RuleClassifier(), _RuleClassifier()
-        print("No trained gesture model found — using the geometric rules.")
+    simple = simple_left = None
+    if app_config.simple_mode:
+        from simple_mode import SimpleModeController
+        simple = SimpleModeController()
+        simple_left = SimpleModeController(hand="Left", network=simple.classifier.network)
     else:
-        right_classifier, left_classifier = classifiers
-        print(f"Gesture model loaded: {right_classifier.network.metadata.get('created_at', '?')}")
+        # The learned classifier is preferred; the original geometric rules remain
+        # as a fallback so a build without a trained model still works.
+        classifiers = gesture_model.load_classifiers()
+        if classifiers is None:
+            right_classifier, left_classifier = _RuleClassifier(), _RuleClassifier()
+            print("No trained gesture model found — using the geometric rules.")
+        else:
+            right_classifier, left_classifier = classifiers
+            print(f"Gesture model loaded: {right_classifier.network.metadata.get('created_at', '?')}")
 
     state_m     = GestureStateMachine()
     click_track = ClickTracker()
@@ -321,6 +327,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 break
             ok, frame = cap.read()
             if not ok:
+                emit({"type": "error", "message": "Camera stopped delivering frames. Check the selected camera and restart tracking."})
                 break
 
             # Always use a natural, selfie-style preview. Gesture handedness and
@@ -353,167 +360,203 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 else:
                     left_lms, left_world = hand_lms, world
 
-            # ── Left hand: deliberate safety lock ─────────────────────
-            left_gesture = Gesture.NONE
-            if left_lms:
-                left_gesture, _ = left_classifier.classify(left_lms, left_world, aspect)
+            if simple is not None:
+                now = time.monotonic()
+                right_event = simple.update(right_lms, right_world, aspect,
+                                            now, presentation_enabled)
+                left_event = simple_left.update(left_lms, left_world, aspect,
+                                                now, presentation_enabled)
+                # Opposite commands released on the same frame cancel each other.
+                event = None if right_event and left_event else right_event or left_event
+                if event:
+                    if event == "next":
+                        actions.next_slide()
+                    else:
+                        actions.previous_slide()
+                    last_action = "NEXT SLIDE" if event == "next" else "PREVIOUS SLIDE"
+                    last_action_until = now + 1.2
+                if right_event and left_event:
+                    last_action, last_action_until = "ONE HAND AT A TIME", now + 1.2
+                simple_status = simple.status + " | " + simple_left.status
+                if right_lms is None and left_lms is None:
+                    simple_status = "Simple mode: no hands detected — show either hand fully in the camera"
+                active_gesture = Gesture.NONE
             else:
-                left_classifier.reset()
+                # ── Left hand: deliberate safety lock ─────────────────────
+                left_gesture = Gesture.NONE
+                if left_lms:
+                    left_gesture, _ = left_classifier.classify(left_lms, left_world, aspect)
+                else:
+                    left_classifier.reset()
 
-            if left_gesture == Gesture.OPEN_PALM:
-                left_palm_count = min(left_palm_count + 1, PALM_HOLD_FRAMES)
-            else:
-                left_palm_count = max(left_palm_count - 1, 0)
+                if left_gesture == Gesture.OPEN_PALM:
+                    left_palm_count = min(left_palm_count + 1, PALM_HOLD_FRAMES)
+                else:
+                    left_palm_count = max(left_palm_count - 1, 0)
 
-            palm_held = left_palm_count >= PALM_HOLD_FRAMES
-            if palm_held and not left_palm_held:
-                presentation_enabled = not presentation_enabled
-                last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
-                last_action_until = time.monotonic() + 1.5
-            left_palm_held = palm_held
+                palm_held = left_palm_count >= PALM_HOLD_FRAMES
+                if palm_held and not left_palm_held:
+                    presentation_enabled = not presentation_enabled
+                    last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
+                    last_action_until = time.monotonic() + 1.5
+                left_palm_held = palm_held
 
-            # ── Left hand: fist → start/stop speech recording ─────────
-            if recognizer is not None and left_gesture == Gesture.FIST:
-                left_fist_count = min(left_fist_count + 1, FIST_HOLD_FRAMES)
-            else:
-                left_fist_count = max(left_fist_count - 1, 0)
+                # ── Left hand: fist → start/stop speech recording ─────────
+                if recognizer is not None and left_gesture == Gesture.FIST:
+                    left_fist_count = min(left_fist_count + 1, FIST_HOLD_FRAMES)
+                else:
+                    left_fist_count = max(left_fist_count - 1, 0)
 
-            should_fist = left_fist_count >= FIST_HOLD_FRAMES
-            with speech_lock:
-                cur_speech = speech_state
-            if should_fist != left_fist_held:
-                left_fist_held = should_fist
-                if left_fist_held and cur_speech == "idle":
-                    with speech_lock:
-                        speech_state = "recording"
-                    recognizer.start_recording()
-                elif not left_fist_held and cur_speech == "recording":
-                    recognizer.stop_recording()
-
-            # Either hand can click; suppress the left click during voice input.
-            left_busy = recognizer is not None and (
-                left_fist_count > 0 or cur_speech == "recording"
-            )
-            left_clicking = left_gesture == Gesture.INDEX_THUMB and not left_busy
-
-            # Transcription confirmation is intentionally unnecessary: paste
-            # the first non-empty result as soon as Whisper returns it.
-            auto_paste = ""
-            with speech_lock:
-                if speech_state == "paste_pending":
-                    auto_paste = pending_text
-                    pending_text = ""
-                    speech_state = "idle"
-            if auto_paste:
-                actions.paste_text(auto_paste)
-                last_action = "TRANSCRIPTION PASTED"
-                last_action_until = time.monotonic() + 1.5
-
-            # ── Right hand: gestures + cursor ──────────────────────────
-            if right_lms:
-                lost_right_frames = 0
-                lms = right_lms
-                raw_gesture, payload = right_classifier.classify(lms, right_world, aspect)
-                entered, active, exited = state_m.update(raw_gesture)
-
-                right_clicking = (raw_gesture == Gesture.INDEX_THUMB)
-                pos_norm     = payload.get("pos", (lms[INDEX_TIP].x, lms[INDEX_TIP].y))
-                palm_pos = (lms[9].x, lms[9].y)
-                # A swipe is judged on a permissive open-palm probability rather
-                # than on the winning class: at swipe speed the palm blurs and
-                # briefly loses the argmax, and the swipe tracker already
-                # bridges short gaps. Actions that must not misfire (black
-                # screen, Mission Control) still go through the strict path.
-                probs = payload.get("probs")
-                palm_open = (probs.get(Gesture.OPEN_PALM.value, 0.0) >= SWIPE_PALM_CONFIDENCE
-                             if probs else is_open_palm(lms))
-                swipe = swipe_track.update(palm_open, palm_pos)
-                scroll_delta = scroll_track.update(
-                    raw_gesture == Gesture.TWO_FINGER_SCROLL, pos_norm[1]
-                )
-
-                # Freeze the pointer during the click pose, as before.
-                if presentation_enabled and raw_gesture == Gesture.POINT:
-                    tx, ty = cam_to_screen(
-                        pos_norm[0], pos_norm[1], disp_x, disp_y, scr_w, scr_h
-                    )
-                    cx += SMOOTH * (tx - cx)
-                    cy += SMOOTH * (ty - cy)
-                    actions.move_cursor(int(cx), int(cy))
-
-                if presentation_enabled and scroll_delta is not None:
-                    actions.scroll(scroll_delta)
-                    last_action, last_action_until = "SCROLL", time.monotonic() + 0.35
-
-                now = time.time()
+                should_fist = left_fist_count >= FIST_HOLD_FRAMES
                 with speech_lock:
                     cur_speech = speech_state
+                if should_fist != left_fist_held:
+                    left_fist_held = should_fist
+                    if left_fist_held and cur_speech == "idle":
+                        with speech_lock:
+                            speech_state = "recording"
+                        recognizer.start_recording()
+                    elif not left_fist_held and cur_speech == "recording":
+                        recognizer.stop_recording()
 
-                if presentation_enabled:
-                    if swipe == "left":
-                        actions.next_slide()
-                        last_action, last_action_until = "NEXT SLIDE", time.monotonic() + 1.2
-                    elif swipe == "right":
-                        actions.previous_slide()
-                        last_action, last_action_until = "PREVIOUS SLIDE", time.monotonic() + 1.2
-                    if entered == Gesture.FIST:
-                        actions.toggle_black_screen()
-                        last_action, last_action_until = "BLACK SCREEN", time.monotonic() + 1.2
-                    elif entered == Gesture.V_SIGN:
-                        actions.mission_control()
-                        last_action, last_action_until = "MISSION CONTROL", time.monotonic() + 1.5
-                    elif entered == Gesture.FIST_THUMB_UP:
-                        actions.toggle_media()
-                        last_action, last_action_until = "PLAY / PAUSE", time.monotonic() + 1.2
-                    elif entered in (Gesture.FIST_THUMB_LEFT, Gesture.FIST_THUMB_RIGHT) \
-                            and now - last_space_t > 1.0:
-                        last_space_t = now
-                        if entered == Gesture.FIST_THUMB_LEFT:
-                            actions.previous_slide()
-                            last_action = "PREVIOUS SLIDE"
-                        else:
+                # Either hand can click; suppress the left click during voice input.
+                left_busy = recognizer is not None and (
+                    left_fist_count > 0 or cur_speech == "recording"
+                )
+                left_clicking = left_gesture == Gesture.INDEX_THUMB and not left_busy
+
+                # Transcription confirmation is intentionally unnecessary: paste
+                # the first non-empty result as soon as Whisper returns it.
+                auto_paste = ""
+                with speech_lock:
+                    if speech_state == "paste_pending":
+                        auto_paste = pending_text
+                        pending_text = ""
+                        speech_state = "idle"
+                if auto_paste:
+                    actions.paste_text(auto_paste)
+                    last_action = "TRANSCRIPTION PASTED"
+                    last_action_until = time.monotonic() + 1.5
+
+                # ── Right hand: gestures + cursor ──────────────────────────
+                if right_lms:
+                    lost_right_frames = 0
+                    lms = right_lms
+                    raw_gesture, payload = right_classifier.classify(lms, right_world, aspect)
+                    entered, active, exited = state_m.update(raw_gesture)
+
+                    right_clicking = (raw_gesture == Gesture.INDEX_THUMB)
+                    pos_norm     = payload.get("pos", (lms[INDEX_TIP].x, lms[INDEX_TIP].y))
+                    palm_pos = (lms[9].x, lms[9].y)
+                    # A swipe is judged on a permissive open-palm probability rather
+                    # than on the winning class: at swipe speed the palm blurs and
+                    # briefly loses the argmax, and the swipe tracker already
+                    # bridges short gaps. Actions that must not misfire (black
+                    # screen, Mission Control) still go through the strict path.
+                    probs = payload.get("probs")
+                    palm_open = (probs.get(Gesture.OPEN_PALM.value, 0.0) >= SWIPE_PALM_CONFIDENCE
+                                 if probs else is_open_palm(lms))
+                    swipe = swipe_track.update(palm_open, palm_pos)
+                    scroll_delta = scroll_track.update(
+                        raw_gesture == Gesture.TWO_FINGER_SCROLL, pos_norm[1]
+                    )
+
+                    # Freeze the pointer during the click pose, as before.
+                    if presentation_enabled and raw_gesture == Gesture.POINT:
+                        tx, ty = cam_to_screen(
+                            pos_norm[0], pos_norm[1], disp_x, disp_y, scr_w, scr_h
+                        )
+                        cx += SMOOTH * (tx - cx)
+                        cy += SMOOTH * (ty - cy)
+                        actions.move_cursor(int(cx), int(cy))
+
+                    if presentation_enabled and scroll_delta is not None:
+                        actions.scroll(scroll_delta)
+                        last_action, last_action_until = "SCROLL", time.monotonic() + 0.35
+
+                    now = time.time()
+                    with speech_lock:
+                        cur_speech = speech_state
+
+                    if presentation_enabled:
+                        if swipe == "left":
                             actions.next_slide()
-                            last_action = "NEXT SLIDE"
-                        last_action_until = time.monotonic() + 1.2
+                            last_action, last_action_until = "NEXT SLIDE", time.monotonic() + 1.2
+                        elif swipe == "right":
+                            actions.previous_slide()
+                            last_action, last_action_until = "PREVIOUS SLIDE", time.monotonic() + 1.2
+                        if entered == Gesture.FIST:
+                            actions.toggle_black_screen()
+                            last_action, last_action_until = "BLACK SCREEN", time.monotonic() + 1.2
+                        elif entered == Gesture.V_SIGN:
+                            actions.mission_control()
+                            last_action, last_action_until = "MISSION CONTROL", time.monotonic() + 1.5
+                        elif entered == Gesture.FIST_THUMB_UP:
+                            actions.toggle_media()
+                            last_action, last_action_until = "PLAY / PAUSE", time.monotonic() + 1.2
+                        elif entered in (Gesture.FIST_THUMB_LEFT, Gesture.FIST_THUMB_RIGHT) \
+                                and now - last_space_t > 1.0:
+                            last_space_t = now
+                            if entered == Gesture.FIST_THUMB_LEFT:
+                                actions.previous_slide()
+                                last_action = "PREVIOUS SLIDE"
+                            else:
+                                actions.next_slide()
+                                last_action = "NEXT SLIDE"
+                            last_action_until = time.monotonic() + 1.2
 
-            else:
-                right_clicking = False
-                swipe_track.update(False, (0.0, 0.0))
-                lost_right_frames += 1
-                if lost_right_frames >= 3:
-                    # Drop the smoothed probabilities too, so a gesture held
-                    # before the hand left frame cannot resume on re-entry.
-                    right_classifier.reset()
+                else:
+                    right_clicking = False
+                    swipe_track.update(False, (0.0, 0.0))
+                    lost_right_frames += 1
+                    if lost_right_frames >= 3:
+                        # Drop the smoothed probabilities too, so a gesture held
+                        # before the hand left frame cannot resume on re-entry.
+                        right_classifier.reset()
 
-            # ── Click pose from either hand → one click ─────────────────────
-            # Both hands feed one tracker. Making the pose with both hands
-            # at once still produces one click.
-            #
-            # Losing a hand mid-pose cancels the click: lowering it out of
-            # frame is not a deliberate release.
-            vanished_mid_click = (
-                (was_clicking_right and not right_lms)
-                or (was_clicking_left and not left_lms)
-            )
-            if vanished_mid_click:
-                click_track.reset()
-            else:
-                for ev in click_track.update(right_clicking or left_clicking):
-                    if ev[0] == "click" and presentation_enabled:
-                        actions.left_click()
-                        last_action, last_action_until = "CLICK", time.monotonic() + 1.0
-            was_clicking_right, was_clicking_left = right_clicking, left_clicking
+                # ── Click pose from either hand → one click ─────────────────────
+                # Both hands feed one tracker. Making the pose with both hands
+                # at once still produces one click.
+                #
+                # Losing a hand mid-pose cancels the click: lowering it out of
+                # frame is not a deliberate release.
+                vanished_mid_click = (
+                    (was_clicking_right and not right_lms)
+                    or (was_clicking_left and not left_lms)
+                )
+                if vanished_mid_click:
+                    click_track.reset()
+                else:
+                    for ev in click_track.update(right_clicking or left_clicking):
+                        if ev[0] == "click" and presentation_enabled:
+                            actions.left_click()
+                            last_action, last_action_until = "CLICK", time.monotonic() + 1.0
+                was_clicking_right, was_clicking_left = right_clicking, left_clicking
 
-            # ── Draw overlays and show the window ──────────────────────
-            active_gesture = active or (entered if entered else Gesture.NONE) \
-                if right_lms else Gesture.NONE
+                # ── Draw overlays and show the window ──────────────────────
+                active_gesture = active or (entered if entered else Gesture.NONE) \
+                    if right_lms else Gesture.NONE
             if right_lms:
-                draw_hand(frame, right_lms, active_gesture)
+                pinch_color = (0, 220, 255) if simple is not None and simple.sequence.closed else None
+                draw_hand(frame, right_lms, active_gesture, color=pinch_color)
+                if simple is not None:
+                    cue = "RIGHT: " + ("PINCH - RELEASE" if simple.sequence.closed else
+                           "READY" if simple.sequence.armed else "OPEN HAND TO ARM")
+                    cv2.putText(frame, cue, (20, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.8, pinch_color or (0, 220, 0), 2, cv2.LINE_AA)
             if left_lms:
                 # Colour the left hand when it is clicking, so the click hand
                 # gives the same feedback the pointing hand does.
+                left_pinch_color = ((0, 220, 255) if simple_left is not None
+                                    and simple_left.sequence.closed else None)
                 draw_hand(frame, left_lms,
-                          Gesture.INDEX_THUMB if left_clicking else Gesture.NONE)
+                          Gesture.INDEX_THUMB if left_clicking else Gesture.NONE,
+                          color=left_pinch_color)
+                if simple_left is not None:
+                    cue = "LEFT: " + ("PINCH - RELEASE" if simple_left.sequence.closed else
+                           "READY" if simple_left.sequence.armed else "OPEN HAND TO ARM")
+                    cv2.putText(frame, cue, (20, 85), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.8, left_pinch_color or (0, 220, 0), 2, cv2.LINE_AA)
             visible_action = last_action if time.monotonic() < last_action_until else ""
             draw_hud(frame, active_gesture, presentation_enabled, visible_action)
 
@@ -536,7 +579,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                         emit({
                             "type": "frame",
                             "data": base64.b64encode(encoded).decode("ascii"),
-                            "message": "Tracking active",
+                            "message": simple_status if simple is not None else "Tracking active",
                         })
             else:
                 cv2.imshow("Hand Tracker", frame)

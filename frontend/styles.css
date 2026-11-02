@@ -341,3 +341,6 @@ footer { justify-content: flex-end; margin-top: 18px; }
   .gesture-groups { grid-template-columns: 1fr; }
   .left-hand dl > div { grid-template-columns: minmax(0, 1fr) minmax(0, .9fr); gap: 14px; }
 }
+
+/* Explicitly hide mode-specific content even when its class sets display. */
+#simpleGuide[hidden], #fullGuide[hidden], #voiceRow[hidden] { display: none; }

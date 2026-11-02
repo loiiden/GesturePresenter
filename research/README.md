@@ -365,3 +365,107 @@ trigger have no left-hand training examples of their own.
 A personalized pilot: one participant. Held-out *session* accuracy says the
 model survives a new sitting with different lighting and seating — not that it
 generalizes to other people. Report it that way.
+
+
+## Simple-mode pinch
+
+The installed `models/simple_pinch.npz` combines old `pinch` recordings from
+`gestures.csv` with new `PINCH_V2_01` pinches from `pinch_v2.csv`. Every other
+right-hand pose from `gestures.csv` and `pointer_click.csv` becomes `none`.
+No old pinch samples are excluded by label. Source CSVs and the full-mode
+model remain unchanged.
+
+Reproduce the installed model:
+
+```sh
+uv run --extra research python -m research.train_simple research/data/gestures.csv research/data/pointer_click.csv research/data/pinch_v2.csv --holdout-session S03 --holdout-trials-from-session PINCH_V2_01 --output models/simple_pinch_combined.npz
+```
+
+Training uses 1,903 pinch frames (1,420 old + 483 fresh) and 15,824 negative
+frames. S03 is held out entirely: 16 old pinch trials and 159 negative trials.
+One whole fresh trial per condition is held out (5 trials, 230 frames), leaving
+11 fresh trials for training. Training and evaluation trial keys are disjoint.
+This remains a pilot for fresh pinches: performance in a new sitting is not
+measured by a within-session trial holdout.
+
+Raw model results: 97.73% frame accuracy and 176/180 correct trials. Exported
+NumPy probabilities match sklearn on all 8,190 held-out frames. Runtime replay
+at 30 fps with a recorded neutral lead-in and simulated release detects 5/5
+fresh and 16/16 old pinch trials. With the geometric release guard, it produces
+no false actions on 159 negative trials (previously four without the guard).
+The runtime confidence threshold and model weights are unchanged.
+
+`MAX_PINCH_DISTANCE_RATIO = 0.30` in `simple_mode.py` limits thumb–index
+separation to 30% of wrist-to-middle-knuckle length, using aspect-corrected 2-D
+coordinates. Old/fresh training pinch frames had maximum ratios of 0.216/0.173;
+the guard leaves room for tracking noise. Beyond the limit, the classifier's
+hysteresis resets and the temporal tracker receives a non-pinch observation.
+Release keeps the 45 ms debounce, with no double-pinch window. Right-hand
+release emits next slide; left-hand release emits previous slide. Separate
+classifier/tracker state per hand shares one model; left image and world
+landmarks are mirrored before feature extraction. Opposite commands released
+on the same frame cancel each other. Tests cover sticky model confidence,
+distance/scale changes, independent hand tracking, immediate releases, and
+identical probabilities for mirrored inputs.
+
+Recorded replay passes all 180 trials on the right and all 180 mirrored trials
+on the left: 21/21 pinches and 159/159 negative trials per hand. Reports are
+`research/reports/simple_pinch_combined_runtime.json` and
+`research/reports/simple_pinch_mirrored_left_runtime.json`. Mirrored right-hand
+recordings validate symmetry, not accuracy on newly captured left-hand poses.
+These tests use simulated transitions and do not establish live-camera accuracy.
+
+The installed archive and `simple_pinch_combined.npz` contain the same weights.
+`simple_pinch_v2.npz` retains the previous fresh-only candidate. A backup of the
+preceding installed model is saved locally under `research/reports/` with a
+`simple_pinch_before_combined_` timestamp. Early stopping uses an internal
+training split, separate from the reported held-out evaluation.
+
+The optional replacement workflow below remains available, but is **not used**
+by the currently installed combined model.
+
+### Replace old pinches with fresh recordings
+
+Keep the old CSVs intact. Use a separate `research/data/pinch_v2.csv` and session
+IDs `PINCH_V2_01`, `PINCH_V2_02`, `PINCH_V2_03`. The gesture label remains `pinch`:
+the source dataset and session identify its generation, rather than inventing
+a different physical gesture. The existing interactive recorder provides live
+preview, position gates, countdown, retakes, and quality checks.
+
+```sh
+uv run --extra research python -m research.recorder --protocol research/protocol_simple.json --participant P001 --session PINCH_V2_01 --output research/data/pinch_v2.csv
+```
+
+Each session has 16 right-hand trials across normal, near, far, tilted and
+off-centre conditions. Touch thumb and index tips and hold contact during each
+recording; release during rest. Vary the remaining fingers and wrist naturally.
+Record one held pinch per trial; the same model serves the left hand through
+mirroring at inference. No separate left-hand training label is needed.
+Repeat with `PINCH_V2_02` and `PINCH_V2_03` at different sittings.
+
+After recording, train a candidate model:
+
+```sh
+uv run --extra research python -m research.train_simple research/data/gestures.csv research/data/pointer_click.csv --replacement-pinch-dataset research/data/pinch_v2.csv --holdout-session S03 --holdout-session PINCH_V2_03 --output models/simple_pinch_v2.npz
+```
+
+`--replacement-pinch-dataset` excludes all old `pinch` rows from both training
+and evaluation; it does not delete or relabel any source file. Other original
+poses remain negative examples. Only the fresh dataset supplies positive
+examples. Empty, non-pinch, or overlapping-session replacement inputs fail
+before the model is written. Metadata records the source and exclusion counts.
+S03 evaluates old negatives; PINCH_V2_03 evaluates fresh positives, both held out
+entirely. A pinch-only holdout cannot measure false activations by itself.
+
+The app continues using `models/simple_pinch.npz` until the candidate is
+validated and deliberately installed there. Test live releases with both
+hands too; held-pose accuracy alone does not establish live reliability.
+For stronger validation, collect fresh `none` samples with the normal protocol
+in a separate dataset and include it among the positional negative datasets.
+
+Camera-free checks:
+
+```sh
+uv run --extra research python -m unittest discover -s tests -p 'test_*.py'
+node --test tests/frontend.test.cjs
+```

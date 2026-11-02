@@ -1,0 +1,77 @@
+{
+  "protocol_version": 3,
+  "schema_version": 2,
+  "gestures": [
+    "pinch"
+  ],
+  "actions": {
+    "pinch": "Simple mode: right-hand release next; left-hand release previous"
+  },
+  "instructions": {
+    "pinch": "Touch the tips of your thumb and INDEX finger. Hold contact throughout the recording, then release during rest. Vary your wrist angle slightly between trials. Record one held pinch per trial; the model also serves the left hand through mirroring."
+  },
+  "conditions": [
+    {
+      "id": "normal",
+      "label": "Normal",
+      "instruction": "Sit at your usual presenting distance.",
+      "repetitions": 5
+    },
+    {
+      "id": "near",
+      "label": "Close to camera",
+      "instruction": "Move closer.",
+      "repetitions": 3,
+      "span_ratio": [
+        1.4,
+        3
+      ]
+    },
+    {
+      "id": "far",
+      "label": "Far from camera",
+      "instruction": "Move back.",
+      "repetitions": 3,
+      "span_ratio": [
+        0.35,
+        0.72
+      ]
+    },
+    {
+      "id": "tilted",
+      "label": "Rotated hand",
+      "instruction": "Rotate your wrist. Change the tilt each time.",
+      "repetitions": 3
+    },
+    {
+      "id": "offcentre",
+      "label": "Off-centre",
+      "instruction": "Move your hand to a corner of the frame.",
+      "repetitions": 2,
+      "target_margin_max": 0.1
+    }
+  ],
+  "left_hand": {
+    "enabled": false
+  },
+  "timing": {
+    "countdown_seconds": 2,
+    "record_seconds": 1.5,
+    "rest_seconds": 0.8
+  },
+  "quality": {
+    "min_handedness_score": 0.75,
+    "_min_edge_margin_note": "Deliberately just above zero. The gate exists to reject hands clipped by the frame edge, where MediaPipe extrapolates landmarks that were never observed. A larger value would fight the offcentre condition, which asks for exactly that placement.",
+    "min_edge_margin": 0.005,
+    "min_hand_span": 0.07,
+    "max_hand_span": 0.9,
+    "min_frames": 12
+  },
+  "gate": {
+    "hold_seconds": 0.8,
+    "_note": "A block starts only after the measured position stays inside its target band for this long. Targets are ratios of the operator's own normal-distance span, calibrated from the first block, because absolute spans are not reachable on every camera."
+  },
+  "notes": {
+    "simple_mode": "Right-hand pinch only. Combine with existing recordings of all other poses as negative examples for training."
+  }
+}

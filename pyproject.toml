@@ -49,11 +49,11 @@ gesture-presenter = "app:main"
 # research/ is intentionally absent: the recorder and trainer are development
 # tools, not part of the installable application.
 py-modules = ["app", "config", "devices", "permissions", "hand_tracker", "gestures",
-              "gesture_features", "gesture_model", "actions", "speech"]
+              "gesture_features", "gesture_model", "simple_mode", "actions", "speech"]
 
 [tool.setuptools.data-files]
 "gesture_presenter" = [
   "hand_landmarker.task",
-  "models/gesture_mlp.npz",
+  "models/gesture_mlp.npz", "models/simple_pinch.npz",
   "frontend/index.html", "frontend/styles.css", "frontend/app.js",
 ]
