@@ -14,7 +14,7 @@ from mediapipe.tasks.python import vision
 import pyautogui
 
 from gestures import (
-    Gesture, GestureClassifier, GestureStateMachine, PinchTracker, PalmSwipeTracker,
+    Gesture, GestureClassifier, GestureStateMachine, ClickTracker, PalmSwipeTracker,
     ScrollTracker,
     INDEX_TIP, is_open_palm,
 )
@@ -57,8 +57,7 @@ HAND_CONNECTIONS = [
 FINGERTIP_IDS = {4, 8, 12, 16, 20}
 
 GESTURE_COLORS = {
-    Gesture.PINCH:            (0, 140, 255),
-    Gesture.PINCH_RIGHT:      (100, 0, 255),
+    Gesture.INDEX_THUMB:      (0, 140, 255),
     Gesture.POINT:            (0, 80, 255),
     Gesture.V_SIGN:           (255, 120, 40),
     Gesture.TWO_FINGER_SCROLL:(180, 120, 20),
@@ -268,7 +267,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
         print(f"Gesture model loaded: {right_classifier.network.metadata.get('created_at', '?')}")
 
     state_m     = GestureStateMachine()
-    pinch_track = PinchTracker()
+    click_track = ClickTracker()
     swipe_track = PalmSwipeTracker()
     scroll_track = ScrollTracker()
 
@@ -305,12 +304,11 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
 
     left_fist_count = 0
     left_fist_held  = False
-    # Either hand can pinch; both feed one tracker. Seeded here so the first
-    # frame is defined before either hand block has run.
-    right_pinching = False
-    left_pinching  = False
-    was_pinching_right = False
-    was_pinching_left  = False
+    # Either hand can make the click pose; both feed one tracker.
+    right_clicking = False
+    left_clicking  = False
+    was_clicking_right = False
+    was_clicking_left  = False
 
     lost_right_frames = 0
 
@@ -392,21 +390,11 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 elif not left_fist_held and cur_speech == "recording":
                     recognizer.stop_recording()
 
-            # ── Left hand: pinch → click, same event as the right hand ────
-            # Pinching with the pointing hand drags the index tip, which is the
-            # very landmark the pointer follows, so the cursor slides during the
-            # click. Offering the click on the other hand keeps the pointing
-            # hand still.
-            #
-            # The guard matters: a tucked-thumb fist rests against the index
-            # finger, so a fist and a pinch sit at almost the same thumb-index
-            # distance (medians 0.44 and 0.43) and both pass the contact gate.
-            # Only the model separates them. While the left hand is engaged in
-            # the voice gesture, refuse to read it as a click as well.
+            # Either hand can click; suppress the left click during voice input.
             left_busy = recognizer is not None and (
                 left_fist_count > 0 or cur_speech == "recording"
             )
-            left_pinching = left_gesture == Gesture.PINCH and not left_busy
+            left_clicking = left_gesture == Gesture.INDEX_THUMB and not left_busy
 
             # Transcription confirmation is intentionally unnecessary: paste
             # the first non-empty result as soon as Whisper returns it.
@@ -428,7 +416,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                 raw_gesture, payload = right_classifier.classify(lms, right_world, aspect)
                 entered, active, exited = state_m.update(raw_gesture)
 
-                right_pinching = (raw_gesture == Gesture.PINCH)
+                right_clicking = (raw_gesture == Gesture.INDEX_THUMB)
                 pos_norm     = payload.get("pos", (lms[INDEX_TIP].x, lms[INDEX_TIP].y))
                 palm_pos = (lms[9].x, lms[9].y)
                 # A swipe is judged on a permissive open-palm probability rather
@@ -444,20 +432,14 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                     raw_gesture == Gesture.TWO_FINGER_SCROLL, pos_norm[1]
                 )
 
-                # Pointing and middle-pinch right click keep following the
-                # index tip. Move before dispatching the click so the context
-                # menu opens at the current, not previous-frame, location.
-                if presentation_enabled and raw_gesture in (Gesture.POINT, Gesture.PINCH_RIGHT):
+                # Freeze the pointer during the click pose, as before.
+                if presentation_enabled and raw_gesture == Gesture.POINT:
                     tx, ty = cam_to_screen(
                         pos_norm[0], pos_norm[1], disp_x, disp_y, scr_w, scr_h
                     )
                     cx += SMOOTH * (tx - cx)
                     cy += SMOOTH * (ty - cy)
                     actions.move_cursor(int(cx), int(cy))
-
-                if presentation_enabled and entered == Gesture.PINCH_RIGHT:
-                    actions.right_click()
-                    last_action, last_action_until = "RIGHT CLICK", time.monotonic() + 1.0
 
                 if presentation_enabled and scroll_delta is not None:
                     actions.scroll(scroll_delta)
@@ -495,7 +477,7 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                         last_action_until = time.monotonic() + 1.2
 
             else:
-                right_pinching = False
+                right_clicking = False
                 swipe_track.update(False, (0.0, 0.0))
                 lost_right_frames += 1
                 if lost_right_frames >= 3:
@@ -503,26 +485,24 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                     # before the hand left frame cannot resume on re-entry.
                     right_classifier.reset()
 
-            # ── Pinch from either hand → one click ─────────────────────
-            # Both hands feed one tracker rather than one each, so a pinch is a
-            # single logical input no matter which hand makes it. Pinching with
-            # both at once is then one click, not two.
+            # ── Click pose from either hand → one click ─────────────────────
+            # Both hands feed one tracker. Making the pose with both hands
+            # at once still produces one click.
             #
-            # A hand that vanishes while still pinched is cancelled rather than
-            # clicked: lowering a pinched hand out of frame is not a release,
-            # and treating it as one would fire a click every time.
-            vanished_mid_pinch = (
-                (was_pinching_right and not right_lms)
-                or (was_pinching_left and not left_lms)
+            # Losing a hand mid-pose cancels the click: lowering it out of
+            # frame is not a deliberate release.
+            vanished_mid_click = (
+                (was_clicking_right and not right_lms)
+                or (was_clicking_left and not left_lms)
             )
-            if vanished_mid_pinch:
-                pinch_track.reset()
+            if vanished_mid_click:
+                click_track.reset()
             else:
-                for ev in pinch_track.update(right_pinching or left_pinching):
+                for ev in click_track.update(right_clicking or left_clicking):
                     if ev[0] == "click" and presentation_enabled:
                         actions.left_click()
                         last_action, last_action_until = "CLICK", time.monotonic() + 1.0
-            was_pinching_right, was_pinching_left = right_pinching, left_pinching
+            was_clicking_right, was_clicking_left = right_clicking, left_clicking
 
             # ── Draw overlays and show the window ──────────────────────
             active_gesture = active or (entered if entered else Gesture.NONE) \
@@ -530,10 +510,10 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
             if right_lms:
                 draw_hand(frame, right_lms, active_gesture)
             if left_lms:
-                # Colour the left hand when it is pinching, so the click hand
+                # Colour the left hand when it is clicking, so the click hand
                 # gives the same feedback the pointing hand does.
                 draw_hand(frame, left_lms,
-                          Gesture.PINCH if left_pinching else Gesture.NONE)
+                          Gesture.INDEX_THUMB if left_clicking else Gesture.NONE)
             visible_action = last_action if time.monotonic() < last_action_until else ""
             draw_hud(frame, active_gesture, presentation_enabled, visible_action)
 

@@ -12,9 +12,8 @@ export const platforms = [
 ];
 
 export const gestures = [
-  { gesture: 'Point index finger', action: 'Move the on-screen pointer' },
-  { gesture: 'Pinch thumb + index', action: 'Left click (either hand)' },
-  { gesture: 'Pinch thumb + middle', action: 'Right click' },
+  { gesture: 'Point index finger, thumb tucked', action: 'Move the on-screen pointer' },
+  { gesture: 'Index straight + thumb out sideways', action: 'Left click on release (either hand)' },
   { gesture: 'Two fingers, move up/down', action: 'Scroll the page' },
   { gesture: 'Open-palm swipe', action: 'Previous / next slide' },
   { gesture: 'Hold a fist', action: 'Toggle a black screen' },
@@ -38,6 +37,6 @@ export const steps = [
   {
     n: '03',
     title: 'Present hands-free',
-    body: 'Point, pinch, swipe, and speak. Step away from the keyboard and command the room.',
+    body: 'Point, click, swipe, and speak. Step away from the keyboard and command the room.',
   },
 ];

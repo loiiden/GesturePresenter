@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,8 +26,9 @@ import numpy as np
 from gesture_features import DEFAULT_CONFIG, FEATURE_VERSION, FeatureConfig, feature_names
 from research.augment import AugmentConfig, expand
 from research.dataset import (
-    filter_rows, majority_by_trial, matrix, read_rows, row_points, summarize,
+    TRIAL_KEY, filter_rows, majority_by_trial, matrix, read_rows, row_points, summarize,
 )
+from research.migrate_gestures import RETIRED, partition_rows
 
 DEFAULT_OUTPUT = Path("models/gesture_mlp.npz")
 
@@ -33,8 +36,14 @@ DEFAULT_OUTPUT = Path("models/gesture_mlp.npz")
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("datasets", nargs="+", type=Path)
+    parser.add_argument("--replacement-dataset", action="append", type=Path, default=[],
+                        help="Fresh point/index_thumb recordings; old point rows in "
+                             "positional datasets are excluded when this is supplied")
     parser.add_argument("--holdout-session", action="append", default=[],
                         help="Session reserved for evaluation; repeat as needed")
+    parser.add_argument("--holdout-trials-from-session", action="append", default=[],
+                        help="Pilot evaluation: reserve one whole trial per gesture/hand/"
+                             "condition in this session; requires at least two per group")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--hidden", default="128,64",
                         help="Comma-separated hidden layer sizes")
@@ -49,13 +58,49 @@ def parse_args(argv=None):
                              "where synthetic shapes make the comparison meaningless)")
     parser.add_argument("--min-score", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--allow-incomplete", action="store_true",
+                        help="Development only: allow a partial gesture set")
     return parser.parse_args(argv)
 
 
-def _split(rows, holdout: set[str]):
-    train = [row for row in rows if row["session_id"] not in holdout]
-    test = [row for row in rows if row["session_id"] in holdout]
+def _split(rows, holdout: set[str], trial_sessions: set[str] | None = None, seed=42):
+    trial_sessions = trial_sessions or set()
+    if holdout & trial_sessions:
+        raise SystemExit("A session cannot have both whole-session and trial holdouts")
+    missing = trial_sessions - {r["session_id"] for r in rows}
+    if missing:
+        raise SystemExit(f"Missing trial-holdout sessions: {sorted(missing)}")
+    groups = defaultdict(set)
+    for row in rows:
+        if row["session_id"] in trial_sessions:
+            group = tuple(row[k] for k in ("participant_id", "session_id", "gesture", "hand", "condition"))
+            groups[group].add(tuple(row[k] for k in TRIAL_KEY))
+    rng = random.Random(seed)
+    held_trials = set()
+    for group, trials in sorted(groups.items()):
+        if len(trials) < 2:
+            raise SystemExit(f"Need at least two trials for a trial holdout: {group}")
+        held_trials.add(rng.choice(sorted(trials)))
+    train, test = [], []
+    for row in rows:
+        is_test = row["session_id"] in holdout or tuple(row[k] for k in TRIAL_KEY) in held_trials
+        (test if is_test else train).append(row)
     return train, test
+
+
+def prepare_training_rows(datasets, replacement_datasets, min_score=0.0):
+    """Keep fresh points separate from the old, ambiguous point definition."""
+    rows = read_rows(datasets)
+    removed = []
+    if replacement_datasets:
+        if {p.resolve() for p in datasets} & {p.resolve() for p in replacement_datasets}:
+            raise SystemExit("Base and replacement datasets must be different files")
+        rows, removed = partition_rows(rows)
+        rows += read_rows(replacement_datasets)
+    removed += [r for r in rows if r["gesture"] in RETIRED]
+    rows = filter_rows([r for r in rows if r["gesture"] not in RETIRED],
+                       min_score=min_score)
+    return rows, removed
 
 
 def _report(name: str, rows, predictions) -> dict:
@@ -97,68 +142,6 @@ def _rule_predictions(rows) -> list[str]:
     return predictions
 
 
-def contact_gates(rows, margin: float = 1.20, release: float = 1.32) -> dict:
-    """Calibrate per-class fingertip-contact limits from the operator's own data.
-
-    ``pinch`` means the thumb and index finger actually touch. A classifier does
-    not learn that definition — it learns whatever separates the training
-    classes, and the recorded data contains a wide unlabelled gap between a
-    closed pinch and an open point. Inside that gap the learned boundary is
-    arbitrary extrapolation, yet it is exactly the region a hand passes through
-    while a thumb approaches a finger, so it decides whether a click fires early.
-
-    The gate closes that gap with a measurement instead of a guess: a predicted
-    pinch is only accepted when the fingertips really are close. Limits are
-    derived per operator because hand proportions differ; ``margin`` is applied
-    over the widest genuine example so normal variation is never rejected, and
-    ``release`` gives hysteresis so a held pinch does not flicker.
-
-    ``release`` is kept deliberately tight. Because the click fires when the
-    pinch *ends*, a wide release band means a partly opened hand still counts as
-    pinching and the click never arrives — the gesture feels stuck. The band has
-    to stay clear of the distances an open pointing hand reaches.
-    """
-    from gesture_features import CONTACT_PAIRS, contact_distance
-
-    gates = {}
-    for label in CONTACT_PAIRS:
-        by_trial: dict[str, list[float]] = {}
-        for row in rows:
-            if row["gesture"] == label:
-                by_trial.setdefault(row["trial_id"], []).append(
-                    contact_distance(row_points(row)[0], label)
-                )
-        if not by_trial:
-            continue
-
-        # Outlier *trials* are removed before calibrating, not outlier frames. A
-        # trial where the fingers never actually met contributes ~45 consistent
-        # frames, which survives any per-frame percentile and would widen the
-        # gate permanently. Judging trials by their median and cutting at
-        # median + 4 MAD isolates that case while keeping normal variation.
-        medians = np.array([float(np.median(v)) for v in by_trial.values()])
-        centre = float(np.median(medians))
-        mad = float(np.median(np.abs(medians - centre))) * 1.4826
-        limit = centre + 4 * mad if mad > 0 else centre * 1.5
-        kept, rejected = [], []
-        for trial_id, values in by_trial.items():
-            if float(np.median(values)) <= limit:
-                kept.extend(values)
-            else:
-                rejected.append((trial_id, round(float(np.median(values)), 3)))
-
-        widest = float(np.percentile(kept, 99.0))
-        gates[label] = {
-            "enter": round(widest * margin, 4),
-            "release": round(widest * release, 4),
-            "observed_p99": round(widest, 4),
-            "observed_median": round(float(np.median(kept)), 4),
-            "samples": len(kept),
-            "excluded_trials": rejected,
-        }
-    return gates
-
-
 def export_npz(path: Path, pipeline, labels, config: FeatureConfig, metadata: dict) -> None:
     """Flatten a StandardScaler + MLPClassifier pipeline into plain arrays."""
     scaler = pipeline.named_steps["standardscaler"]
@@ -190,13 +173,42 @@ def main(argv=None) -> None:
     args = parse_args(argv)
     config = FeatureConfig(world=not args.no_world)
 
-    rows = filter_rows(read_rows(args.datasets), min_score=args.min_score)
+    rows, removed = prepare_training_rows(args.datasets, args.replacement_dataset,
+                                          args.min_score)
+    print(f"Gesture migration: excluded {len(removed)} old gesture frames")
     holdout = set(args.holdout_session)
-    train_rows, test_rows = _split(rows, holdout)
+    trial_sessions = set(args.holdout_trials_from_session)
+    train_rows, test_rows = _split(rows, holdout, trial_sessions, args.seed)
+    if trial_sessions:
+        print("PILOT evaluation: whole trials held out within "
+              f"{', '.join(sorted(trial_sessions))}; this does not test a new sitting.")
     if not train_rows:
         raise SystemExit("No training rows remain after holding out sessions")
     if holdout and not test_rows:
         raise SystemExit(f"No rows found for held-out session(s): {sorted(holdout)}")
+    missing_sessions = holdout - {r["session_id"] for r in test_rows}
+    if missing_sessions:
+        raise SystemExit(f"Missing held-out sessions: {sorted(missing_sessions)}")
+    expected = set(json.loads(Path(__file__).with_name("protocol.json").read_text())["gestures"])
+    present = {r["gesture"] for r in train_rows}
+    unknown = {r["gesture"] for r in rows} - expected
+    if unknown:
+        raise SystemExit(f"Unknown gesture labels: {sorted(unknown)}")
+    if not args.allow_incomplete:
+        missing = expected - present
+        if missing:
+            raise SystemExit(
+                f"Missing training gestures: {sorted(missing)}. Record point and "
+                "index_thumb with --gestures point index_thumb, then supply "
+                "--replacement-dataset alongside the retained dataset. "
+                "Model not overwritten."
+            )
+        if (holdout or trial_sessions) and (missing_test := expected - {r["gesture"] for r in test_rows}):
+            raise SystemExit(
+                f"Held-out data is missing gestures: {sorted(missing_test)}. "
+                "Hold out both an old session (e.g. S03) and a new pointer/click "
+                "session (e.g. G03) using repeated --holdout-session flags."
+            )
 
     stats = summarize(rows)
     print(f"Dataset: {stats['frames']} frames / {stats['trials']} trials "
@@ -256,24 +268,20 @@ def main(argv=None) -> None:
                 estimator.fit(X_train, y_train)
                 results[name] = _report(name, test_rows, estimator.predict(X_test))
 
-    gates = contact_gates(train_rows)
-    for label, gate in gates.items():
-        print(f"Contact gate {label}: enter <= {gate['enter']}, release > {gate['release']} "
-              f"(p99 of genuine examples {gate['observed_p99']}, median {gate['observed_median']})")
-        for trial_id, value in gate["excluded_trials"]:
-            print(f"  ! trial {trial_id} excluded from calibration: median contact "
-                  f"distance {value} — the fingers were probably never touching")
-
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "feature_version": FEATURE_VERSION,
-        "contact_gates": gates,
+        "gesture_protocol_version": 3,
+        "migration_excluded_frames": len(removed),
+        "replacement_datasets": [str(p) for p in args.replacement_dataset],
         "hidden_layers": list(hidden),
         "augment_copies": args.augment_copies,
         "training_frames": int(len(train_rows)),
         "training_vectors": int(X_train.shape[0]),
         "training_sessions": sorted({r["session_id"] for r in train_rows}),
         "holdout_sessions": sorted(holdout),
+        "trial_holdout_sessions": sorted(trial_sessions),
+        "holdout_trial_keys": sorted({tuple(r[k] for k in TRIAL_KEY) for r in test_rows}),
         "labels": sorted(set(y_train.tolist())),
         "results": results,
         "dataset": stats,

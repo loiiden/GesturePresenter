@@ -34,6 +34,8 @@ import statistics
 import sys
 import threading
 import time
+import uuid
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +48,21 @@ from research.dataset import (
 
 PROTOCOL_PATH = Path(__file__).with_name("protocol.json")
 DEFAULT_OUTPUT = Path("research/data/gestures.csv")
+
+
+def select_gestures(protocol: dict, selected: list[str] | None) -> dict:
+    """Keep the original conditions, repetitions and gates for a subset."""
+    if not selected:
+        return protocol
+    unknown = set(selected) - set(protocol["gestures"])
+    if unknown:
+        raise ValueError(f"Unknown gesture(s): {', '.join(sorted(unknown))}")
+    protocol = deepcopy(protocol)
+    protocol["gestures"] = [g for g in protocol["gestures"] if g in selected]
+    left = protocol.get("left_hand", {})
+    left["gestures"] = [g for g in left.get("gestures", []) if g in selected]
+    left["enabled"] = bool(left.get("enabled") and left["gestures"])
+    return protocol
 
 # MediaPipe reports handedness for the image it was given. The recorder mirrors
 # the frame (as the product does), which reverses the label, so the anatomical
@@ -242,6 +259,7 @@ class RecorderApi:
         self.quality = protocol["quality"]
         self.timing = protocol["timing"]
         self.output = args.output
+        self.run_id = uuid.uuid4().hex[:12]
 
         self._lock = threading.RLock()
         self._worker: RecorderWorker | None = None
@@ -613,7 +631,7 @@ class RecorderApi:
             "schema_version": SCHEMA_VERSION,
             "participant_id": self.args.participant,
             "session_id": self.args.session,
-            "trial_id": f"{self.args.session}-{trial.index:04d}",
+            "trial_id": f"{self.args.session}-{self.run_id}-{trial.index:04d}",
             "gesture": trial.gesture,
             "condition": trial.condition,
             "hand": trial.hand,
@@ -682,6 +700,8 @@ def parse_args(argv=None):
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--protocol", type=Path, default=PROTOCOL_PATH)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--gestures", nargs="+",
+                        help="Record only these gestures, e.g. point index_thumb")
     return parser.parse_args(argv)
 
 
@@ -690,6 +710,10 @@ def main(argv=None) -> None:
 
     args = parse_args(argv)
     protocol = json.loads(args.protocol.read_text(encoding="utf-8"))
+    try:
+        protocol = select_gestures(protocol, args.gestures)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     if int(protocol["schema_version"]) != SCHEMA_VERSION:
         raise SystemExit(
             f"Protocol targets schema v{protocol['schema_version']}, "

@@ -31,6 +31,8 @@ def parse_args(argv=None):
     parser.add_argument("--protocol", type=Path, default=PROTOCOL_PATH)
     parser.add_argument("--session", action="append", default=[],
                         help="Restrict to these sessions; repeat as needed")
+    parser.add_argument("--gestures", nargs="+",
+                        help="Inspect a focused recording, e.g. index_thumb")
     return parser.parse_args(argv)
 
 
@@ -53,6 +55,12 @@ def main(argv=None) -> int:
     conditions = {c["id"]: c for c in protocol["conditions"]}
 
     rows = read_rows(args.datasets)
+    if args.gestures:
+        unknown = set(args.gestures) - set(protocol["gestures"])
+        if unknown:
+            raise SystemExit(f"Unknown gestures: {sorted(unknown)}")
+        protocol["gestures"] = [g for g in protocol["gestures"] if g in args.gestures]
+        rows = [r for r in rows if r["gesture"] in args.gestures]
     if args.session:
         rows = [row for row in rows if row["session_id"] in set(args.session)]
     if not rows:

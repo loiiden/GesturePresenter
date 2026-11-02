@@ -19,8 +19,7 @@ class Gesture(str, Enum):
     POINT            = "point"             # index only          → laser pointer
     V_SIGN           = "v_sign"            # index + middle held → Mission Control
     TWO_FINGER_SCROLL = "two_finger_scroll" # closed two fingers  → scroll
-    PINCH            = "pinch"             # thumb+index touch   → click on release
-    PINCH_RIGHT      = "pinch_right"       # thumb+middle        → right-click
+    INDEX_THUMB      = "index_thumb"       # index up, thumb out → click on release
     OPEN_PALM        = "open_palm"          # horizontal swipe    → change slide
     FIST             = "fist"              # held fist           → black screen
     FIST_THUMB_LEFT  = "fist_thumb_left"   # static fallback     → previous slide
@@ -36,7 +35,7 @@ def _dist(a, b) -> float:
 def _hand_size(lms) -> float:
     return _dist(lms[WRIST], lms[MIDDLE_MCP]) or 1e-6
 
-def _pinch_ratio(lms, tip_a: int, tip_b: int) -> float:
+def _finger_distance_ratio(lms, tip_a: int, tip_b: int) -> float:
     return _dist(lms[tip_a], lms[tip_b]) / _hand_size(lms)
 
 def _joint_angle(a, b, c) -> float:
@@ -69,12 +68,33 @@ def _extended_fingers(lms) -> list[bool]:
     ]
 
 
-def _index_available_for_pinch(lms) -> bool:
-    """Reject thumb/index contact caused by making a closed fist."""
-    angle = _joint_angle(lms[INDEX_MCP], lms[INDEX_PIP], lms[INDEX_TIP])
-    tip_from_wrist = _dist(lms[INDEX_TIP], lms[WRIST])
-    pip_from_wrist = _dist(lms[INDEX_PIP], lms[WRIST])
-    return angle > 105 and tip_from_wrist > pip_from_wrist * 0.88
+def is_index_thumb(lms) -> bool:
+    """Index straight, other fingers curled, straight thumb out from the palm.
+
+    Measure sideways relative to the palm, so rotating or mirroring the hand
+    does not change the pose. Callers can aspect-correct landmarks first.
+    """
+    ext = _extended_fingers(lms)
+    if not ext[0] or any(ext[1:]):
+        return False
+    if _joint_angle(lms[2], lms[3], lms[4]) < 150:
+        return False
+    size = _hand_size(lms)
+    px = (lms[MIDDLE_MCP].x - lms[WRIST].x) / size
+    py = (lms[MIDDLE_MCP].y - lms[WRIST].y) / size
+    tx = (lms[THUMB_TIP].x - lms[2].x) / size
+    ty = (lms[THUMB_TIP].y - lms[2].y) / size
+    ix = lms[INDEX_TIP].x - lms[INDEX_MCP].x
+    iy = lms[INDEX_TIP].y - lms[INDEX_MCP].y
+    length = math.hypot(tx, ty) * math.hypot(ix, iy)
+    if length < 1e-8 or abs(tx * ix + ty * iy) / length > 0.65:
+        return False  # thumb and index must form an L, not run parallel
+    sideways = abs(tx * py - ty * px)
+    along = abs(tx * px + ty * py)
+    return (sideways > 0.35 and sideways > along
+            and _dist(lms[THUMB_TIP], lms[INDEX_TIP]) / size > 0.65
+            and _dist(lms[THUMB_TIP], lms[MIDDLE_TIP]) / size > 0.40
+            and _dist(lms[THUMB_TIP], lms[INDEX_MCP]) / size > 0.65)
 
 def is_fist(lms) -> bool:
     """All four fingers curled — used for left-hand speech recording trigger."""
@@ -104,36 +124,10 @@ def _thumb_direction(lms) -> Optional[str]:
 # ── Gesture classifier (pure geometry, one frame) ─────────────────────────────
 
 class GestureClassifier:
-    PINCH_CLOSE = 0.20
-    PINCH_OPEN = 0.27
-
-    def __init__(self):
-        self._index_pinched = False
-        self._middle_pinched = False
-
     def classify(self, lms) -> tuple[Gesture, dict]:
         tip_pos = (lms[INDEX_TIP].x, lms[INDEX_TIP].y)
-
-        index_ratio = _pinch_ratio(lms, THUMB_TIP, INDEX_TIP)
-        threshold = self.PINCH_OPEN if self._index_pinched else self.PINCH_CLOSE
-        self._index_pinched = (
-            index_ratio < threshold and _index_available_for_pinch(lms)
-        )
-        if self._index_pinched:
-            return Gesture.PINCH, {"pos": tip_pos}
-
-        # Right click is deliberately stricter than left click: the index must
-        # remain clearly away, preventing an ambiguous three-finger cluster.
-        middle_ratio = _pinch_ratio(lms, THUMB_TIP, MIDDLE_TIP)
-        middle_threshold = self.PINCH_OPEN if self._middle_pinched else self.PINCH_CLOSE
-        index_points = _is_extended(lms, INDEX_MCP, INDEX_PIP, INDEX_TIP)
-        self._middle_pinched = (
-            middle_ratio < middle_threshold
-            and index_ratio > self.PINCH_OPEN
-            and index_points
-        )
-        if self._middle_pinched:
-            return Gesture.PINCH_RIGHT, {"pos": tip_pos}
+        if is_index_thumb(lms):
+            return Gesture.INDEX_THUMB, {"pos": tip_pos}
 
         ext = _extended_fingers(lms)
         if ext[0] and ext[1] and sum(ext) >= 3:
@@ -141,7 +135,7 @@ class GestureClassifier:
         if ext[0] and not any(ext[1:]):
             return Gesture.POINT, {"pos": tip_pos}
         if ext[0] and ext[1] and not ext[2] and not ext[3]:
-            finger_gap = _pinch_ratio(lms, INDEX_TIP, MIDDLE_TIP)
+            finger_gap = _finger_distance_ratio(lms, INDEX_TIP, MIDDLE_TIP)
             if finger_gap < 0.34:
                 return Gesture.TWO_FINGER_SCROLL, {"pos": tip_pos}
             if finger_gap > 0.42:
@@ -159,22 +153,16 @@ class GestureClassifier:
         return Gesture.NONE, {"pos": tip_pos}
 
 
-# ── Pinch tracker (one click per pinch) ───────────────────────────────────────
+# ── Click tracker (one click per completed pose) ─────────────────────────────
 
-PINCH_ON_FRAMES = 2
-PINCH_OFF_FRAMES = 2
+CLICK_ON_FRAMES = 2
+CLICK_OFF_FRAMES = 2
 
-class PinchTracker:
-    """Emits ("click",) once per completed pinch.
+class ClickTracker:
+    """Emits ("click",) once when the index-and-thumb pose is released.
 
-    A pinch is deliberately allowed to move. Holding two fingertips together
-    perfectly still is not something a presenter can do while standing, and the
-    hand always drifts a little, so movement during a pinch carries no meaning
-    and is simply ignored.
-
-    The click fires on release rather than on contact, so a pinch held by
-    accident does not repeat, and the debounce on both edges absorbs the
-    single-frame flicker that landmark tracking produces at the boundary.
+    Holding the pose never repeats. Movement is ignored and both edges are
+    debounced to absorb single-frame flicker. Tracking loss cancels the pose.
     """
     def __init__(self):
         self._active = False
@@ -185,17 +173,17 @@ class PinchTracker:
     def is_active(self) -> bool:
         return self._active
 
-    def update(self, pinching: bool, pos: tuple[float, float] | None = None) -> list:
-        if pinching:
+    def update(self, clicking: bool, pos: tuple[float, float] | None = None) -> list:
+        if clicking:
             self._on_count += 1
             self._off_count = 0
         else:
             self._off_count += 1
             self._on_count = 0
 
-        if pinching and not self._active and self._on_count >= PINCH_ON_FRAMES:
+        if clicking and not self._active and self._on_count >= CLICK_ON_FRAMES:
             self._active = True
-        elif not pinching and self._active and self._off_count >= PINCH_OFF_FRAMES:
+        elif not clicking and self._active and self._off_count >= CLICK_OFF_FRAMES:
             self._active = False
             return [("click",)]
         return []
@@ -212,8 +200,7 @@ HOLD_FRAMES: dict[Gesture, int] = {
     Gesture.POINT:            2,
     Gesture.V_SIGN:          18,
     Gesture.TWO_FINGER_SCROLL: 2,
-    Gesture.PINCH:            3,
-    Gesture.PINCH_RIGHT:      4,
+    Gesture.INDEX_THUMB:      3,
     Gesture.OPEN_PALM:        12,
     Gesture.FIST:             12,
     Gesture.FIST_THUMB_LEFT:  10,

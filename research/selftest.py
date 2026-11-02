@@ -23,6 +23,7 @@ from research.dataset import SCHEMA_VERSION, append_rows, read_rows, summarize
 # Distinct synthetic hand shapes — not anatomically meaningful, just separable.
 _SHAPES = {
     "point": [(0, 0), (1, 2), (0, 3)],
+    "index_thumb": [(0, 0), (0.2, 3.4), (0, 4)],
     "fist": [(0, 0), (0.4, 0.6), (0, 0.9)],
     "open_palm": [(0, 0), (1.6, 2.4), (0, 3.4)],
     "v_sign": [(0, 0), (2.2, 1.4), (0, 2.6)],
@@ -86,7 +87,7 @@ def main() -> int:
         train_main([
             str(csv_path), "--holdout-session", "S03",
             "--output", str(model_path), "--augment-copies", "2",
-            "--hidden", "64,32", "--no-rules",
+            "--hidden", "64,32", "--no-rules", "--allow-incomplete",
         ])
 
         from gesture_model import GestureNetwork, MLGestureClassifier
@@ -114,7 +115,7 @@ def main() -> int:
 
         # The classifier wrapper must pass the network's own decision through
         # unchanged once smoothing has settled, and must keep the payload shape
-        # that PinchTracker / PalmSwipeTracker / ScrollTracker rely on.
+        # that ClickTracker / PalmSwipeTracker / ScrollTracker rely on.
         from types import SimpleNamespace
         points = _hand("open_palm", rng)
         world_points = (points - 0.5) * 0.2

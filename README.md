@@ -21,35 +21,38 @@ Windows, or Linux and restored the next time the app starts.
 
 | Hand | Gesture | Action |
 |---|---|---|
-| Right | Isolated index finger | Move presentation pointer |
-| Right | Thumb + index pinch and release | Left click |
-| Right | Thumb + middle pinch | Right click |
+| Right | Index finger straight, thumb relaxed/tucked | Move presentation pointer |
+| Right | Index straight + thumb straight out sideways, other fingers curled; release | Left click |
 | Right | Index + middle held together, move vertically | Scroll |
 | Right | Open-palm horizontal swipe | Previous/next slide |
 | Right | Held fist | Toggle black screen |
 | Right | Thumb up | Play/pause media |
 | Right | Held V sign | Mission Control/task overview |
-| **Left** | **Thumb + index pinch and release** | **Left click — same as the right hand** |
+| **Left** | **Index straight + thumb out sideways; release** | **Left click — same as the right hand** |
 | Left | Held open palm | Lock/unlock gesture controls |
 | Left | Hold fist and speak, then release | Transcribe and paste automatically |
 
-Either hand can click. Pinching with the pointing hand moves the index fingertip
-— the landmark the pointer follows — so the cursor drifts as you click.
-Pinching with the left hand instead leaves the pointer where you aimed it.
-Pinching with both at once is still one click.
+Either hand can click. Hold the index-and-thumb L shape, then tuck the thumb
+back in to click once. Holding the pose does not repeat. The pointer freezes
+while the right hand holds the click pose; the left hand can click while the
+right continues pointing. Making the pose with both hands still gives one click.
+Right click and both old pinch gestures have been removed.
 
-A pinch requires the fingertips to actually touch, so bringing the thumb near
-the finger without contact does not click.
+Existing recordings can be reused: the [incremental recording workflow](research/README.md#replace-only-pointer-and-click)
+replaces old pointing and pinch samples with clean `point` and `index_thumb`
+recordings, retaining every other class.
 
 Press `L` to lock or unlock controls from the keyboard.
 
 ## Gesture recognition
 
 Poses are classified by a small neural network trained on recorded hand
-landmarks, not by hand-written geometric rules. On a recording session held out
-of training entirely it reaches 0.99 trial accuracy, against 0.80 for the rules
-it replaced; the largest gains are on "no gesture" and on thumb-out fists, the
-two cases where the old rules misfired into unwanted actions.
+landmarks. The current model includes clean `point` and `index_thumb` recordings.
+Recorded-pose runtime tests classify 157/158 held-out trials correctly, including
+all 13 fresh pointing/click trials. The fresh poses currently have only one
+recording session, so their evaluation holds out whole trials within that
+session; performance across new sittings remains unmeasured. See
+[model validation](models/README.md) for the test scope.
 
 Recognition is designed to survive a change of room and camera:
 

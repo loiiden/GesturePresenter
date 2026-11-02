@@ -3,6 +3,10 @@ let initialized = false;
 let phase = 'idle';
 let pollInFlight = false;
 let actionInFlight = false;
+let engineReady = false;
+let initInFlight = false;
+let initializationFailed = false;
+let pollTimer;
 
 function values() {
   return {
@@ -62,38 +66,46 @@ function closeGestureGuide() {
   $('gestureGuideButton').focus();
 }
 
-function setPhase(value) {
-  phase = value || 'idle';
-  $('statusBadge').classList.toggle('running', phase === 'running');
+function renderStartButton() {
+  const button = $('startButton');
   const labels = {
     idle: 'Start presentation',
     starting: 'Cancel startup',
     running: 'Stop tracking',
     stopping: 'Stopping…',
   };
-  $('startButton').textContent = labels[phase] || labels.idle;
-  $('startButton').classList.toggle('stop', phase === 'running' || phase === 'starting');
-  $('startButton').disabled = actionInFlight || phase === 'stopping';
+  const label = !initialized
+    ? (initializationFailed ? 'Retry loading' : 'Loading…')
+    : phase === 'idle' && !engineReady ? 'Preparing engine…'
+    : labels[phase] || labels.idle;
+  const disabled = actionInFlight || initInFlight || phase === 'stopping'
+    || (!initialized ? !initializationFailed : phase === 'idle' && !engineReady);
+  // WebKit can drop a click if textContent replaces the pressed text node
+  // between mouse-down and mouse-up. Polls must leave unchanged labels alone.
+  if (button.textContent !== label) button.textContent = label;
+  if (button.disabled !== disabled) button.disabled = disabled;
+  button.classList.toggle('stop', phase === 'running' || phase === 'starting');
+}
+
+function setPhase(value, ready = engineReady) {
+  phase = value || 'idle';
+  engineReady = Boolean(ready);
+  $('statusBadge').classList.toggle('running', phase === 'running');
+  renderStartButton();
   $('statusBadge').querySelector('span').textContent =
     phase === 'running' ? 'Live' : phase === 'starting' ? 'Starting' : phase === 'stopping' ? 'Stopping' : 'Ready';
 }
 
-function setEngineReady(ready) {
-  if (phase !== 'idle') return;
-  $('startButton').disabled = actionInFlight || !ready;
-  $('startButton').textContent = ready ? 'Start presentation' : 'Preparing engine…';
-  if (!ready) $('statusText').textContent = 'Preparing gesture recognition…';
-}
-
 async function handleStart() {
-  if (actionInFlight) return;
+  if (actionInFlight || initInFlight) return;
   if (!initialized) {
-    showError('The application is still loading. Please wait a moment.');
+    await init();
     return;
   }
+  if (phase === 'stopping' || (phase === 'idle' && !engineReady)) return;
   $('error').hidden = true;
   actionInFlight = true;
-  $('startButton').disabled = true;
+  renderStartButton();
   try {
     if (phase !== 'idle') {
       const result = await window.pywebview.api.stop_tracking();
@@ -113,7 +125,7 @@ async function handleStart() {
     actionInFlight = false;
     // Stopping remains locked until the backend confirms the camera thread has
     // exited. A completed startup can be cancelled while the camera opens.
-    $('startButton').disabled = phase === 'stopping';
+    renderStartButton();
   }
 }
 
@@ -151,11 +163,12 @@ function bindControls() {
 }
 
 async function init() {
-  bindControls();
+  if (initialized || initInFlight) return;
+  initInFlight = true;
+  initializationFailed = false;
+  renderStartButton();
+  $('error').hidden = true;
   $('statusText').textContent = 'Loading configuration…';
-  // Polling must begin immediately so a tracking session can never start
-  // without the frontend observing its status and preview events.
-  const pollTimer = setInterval(poll, 120);
   try {
     const state = await window.pywebview.api.initial_state();
     // Give the selects valid values immediately. OS device names are refreshed
@@ -165,31 +178,32 @@ async function init() {
       displays: [{id: state.config.display_index, label: `Display ${state.config.display_index + 1}`}],
     }, state.config);
     apply(state.config);
-    setPhase(state.phase);
-    setEngineReady(state.engineReady);
-    if (state.engineError) showError(state.engineError);
     if (!state.voiceAvailable) {
       $('voiceRow').classList.add('disabled');
       $('voice').checked = false;
       $('voiceHint').textContent = 'Voice components are not installed';
     }
     initialized = true;
-    setPhase(state.phase);
-    setEngineReady(state.engineReady);
+    setPhase(state.phase, state.engineReady);
     $('statusText').textContent = state.message || 'Camera is off';
+    if (state.engineError) showError(state.engineError);
+    // Start only after configuration is applied, before Start becomes enabled.
+    // An early poll must not race initialization and publish stale readiness.
+    if (!pollTimer) pollTimer = setInterval(poll, 120);
     // Device metadata can take several seconds on macOS. Refresh it in the
     // background after Start is already safe to use.
     refreshDevices(state.config);
   } catch (error) {
-    initialized = true;
-    $('startButton').disabled = false;
-    $('startButton').textContent = 'Retry start';
+    initializationFailed = true;
     showError(`Application initialization failed: ${error.message || error}`);
+  } finally {
+    initInFlight = false;
+    renderStartButton();
   }
 }
 
 async function poll() {
-  if (pollInFlight) return;
+  if (!initialized || pollInFlight) return;
   pollInFlight = true;
   try {
     const state = await window.pywebview.api.poll();
@@ -197,10 +211,9 @@ async function poll() {
     // older idle poll overwrite the disabled button and "Requesting…" feedback.
     const waitingForStart = actionInFlight && phase === 'idle' && state.phase === 'idle';
     if (!waitingForStart) {
-      setPhase(state.phase);
-      setEngineReady(state.engineReady);
-      if (state.engineError) showError(state.engineError);
+      setPhase(state.phase, state.engineReady);
       $('statusText').textContent = state.message;
+      if (state.engineError) showError(state.engineError);
       if (state.error) showError(state.error);
     }
     if (state.frame) {
@@ -218,4 +231,7 @@ async function poll() {
   }
 }
 
+bindControls();
 window.addEventListener('pywebviewready', init);
+// The bridge may already exist if this script loads after its ready event.
+if (window.pywebview?.api?.initial_state) init();

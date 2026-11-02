@@ -26,10 +26,6 @@ def left_click() -> None:
     pyautogui.click()
 
 
-def right_click() -> None:
-    pyautogui.rightClick()
-
-
 def next_slide() -> None:
     pyautogui.press("right")
 

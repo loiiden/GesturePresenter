@@ -17,7 +17,95 @@ The application never imports scikit-learn. scikit-learn does not guarantee that
 pickled estimators load across versions, so shipping one would make the built
 binary fail in a way that only shows up on someone else's machine.
 
-## Quick start
+## Replace only pointer and click
+
+Record two clean poses: `point` with the index straight and thumb tucked, and
+`index_thumb` with the index straight and thumb straight out to the side
+(an L shape). Keep middle/ring/pinky curled for both. The click fires once on
+release and works with either hand. Right click is removed.
+
+All old `point`, `pinch`, and `pinch_right` recordings are excluded. Every
+other class keeps its existing data, action mapping and timing. The CSV schema
+and feature vector are unchanged; no full recording session is needed.
+
+1. Prepare the retained dataset (already done in this checkout):
+
+   ```bash
+   uv run --extra research python -m research.migrate_gestures research/data/gestures.csv
+   ```
+
+   This creates `research/data/gestures_v3.csv` and a
+   `gestures_v3.migration.json` report. The original `gestures.csv` stays
+   intact for recovery. Existing outputs are never overwritten; use
+   `--dry-run` to inspect the counts without writing.
+
+   Local result: **19,688 frames / 436 trials retained** from all eight
+   unchanged classes. **6,565 frames / 143 trials excluded**, covering all old
+   pointing and both pinch classes. There is no geometric filtering or
+   automatic relabelling of old pointing poses.
+
+2. Record the two replacement poses in three short sittings, changing lighting
+   or seating between them. Use new session IDs:
+
+   ```bash
+   uv run --extra research python -m research.recorder --participant P001 --session G01 --gestures point index_thumb --output research/data/pointer_click.csv
+   uv run --extra research python -m research.recorder --participant P001 --session G02 --gestures point index_thumb --output research/data/pointer_click.csv
+   uv run --extra research python -m research.recorder --participant P001 --session G03 --gestures point index_thumb --output research/data/pointer_click.csv
+   ```
+
+   Each sitting has **38 trials**: 16 right-hand pointing, 16 right-hand click,
+   and 6 left-hand click trials. Allow about three minutes plus positioning.
+   Countdown, rest, near/far/tilted/off-centre blocks, calibration, and quality
+   gates work as before. Hold the requested pose throughout recording and
+   release during rest. Each launch gets unique trial IDs.
+
+3. Check each new sitting:
+
+   ```bash
+   uv run --extra research python -m research.inspect research/data/pointer_click.csv --gestures point index_thumb --session G01
+   uv run --extra research python -m research.inspect research/data/pointer_click.csv --gestures point index_thumb --session G02
+   uv run --extra research python -m research.inspect research/data/pointer_click.csv --gestures point index_thumb --session G03
+   ```
+
+4. Train on the retained data plus the fresh pointer/click file:
+
+   ```bash
+   uv run --extra research python -m research.train research/data/gestures_v3.csv \
+     --replacement-dataset research/data/pointer_click.csv \
+     --holdout-session S03 --holdout-session G03 --baselines
+   ```
+
+   `--replacement-dataset` identifies the fresh recordings. The trainer
+   excludes any old point rows in the base datasets and removes both pinch
+   classes from all inputs. This also handles supplying the original base CSV
+   accidentally without mixing its old points into the new recordings.
+
+   S03 tests unchanged gestures; G03 tests fresh pointing and clicking on an
+   unseen sitting. Export is blocked if any current class is missing from
+   training or the requested holdout. `--allow-incomplete` is only for
+   synthetic development tests.
+
+The bundled model has now been trained on the retained data and G01, enabling
+the fresh pointer/click pair. There is no legacy pointer compatibility rule.
+With only G01 available, the initial evaluation reserves whole trials within
+that sitting; it does not yet establish performance across sittings:
+
+```bash
+uv run --extra research python -m research.train research/data/gestures_v3.csv \
+  --replacement-dataset research/data/pointer_click.csv \
+  --holdout-session S03 --holdout-trials-from-session G01
+```
+
+This reserves one trial per participant/session/gesture/hand/condition, requires
+at least two trials in each group, and records the exact held-out trial keys in
+the model metadata. Augmentation is applied only after the split. Prefer the
+G03 whole-session holdout above once those additional recordings exist.
+
+[Current results](../models/README.md): 157/158 recorded holdout trials correct
+through runtime smoothing; all 13 pointer/click trials correct. Restart the app
+after retraining to load the new model.
+
+## Quick start (full dataset, for a new operator)
 
 ```bash
 uv sync --extra research
@@ -46,7 +134,8 @@ uv run gesture-presenter
 ## The recorder
 
 A pywebview window with a live skeleton preview, guided prompts, and a countdown
-→ record → rest cycle. Roughly **194 trials, ~14 minutes** per session.
+→ record → rest cycle. Roughly **184 trials, ~13 minutes** per full session; 38 trials with
+`--gestures point index_thumb`.
 
 Keyboard: `Space` pause/resume, `R` retake, `S` skip.
 
@@ -148,61 +237,31 @@ while keeping the old label — augmentation that manufactures wrong labels.
 
 ## Gesture set
 
-Eleven classes. Nine drive actions; two exist purely to protect a neighbour:
+Ten classes:
 
 | Gesture | Action |
 | --- | --- |
 | `point` | move the pointer |
-| `pinch` | left click |
-| `pinch_right` | right click |
+| `index_thumb` | left click on release (either hand) |
 | `open_palm` | swipe horizontally to change slide |
 | `v_sign` | Mission Control |
 | `two_finger_scroll` | scroll |
 | `fist` | black screen |
 | `fist_thumb_up` | play / pause |
-| `fist_thumb_left`, `fist_thumb_right` | **nothing** |
+| `fist_thumb_left`, `fist_thumb_right` | previous / next slide (existing static fallback) |
 | `none` | nothing |
 
-`fist_thumb_left` / `fist_thumb_right` are recorded but bound to no action. Left
-out of the label set entirely, a fist with the thumb sticking sideways has
-nowhere to land and the model assigns it to its nearest neighbour — `fist` —
-which blacks the screen mid-presentation. Giving them their own class turns a
-disruptive misfire into a harmless no-op.
+### Shape and motion
 
-### Contact gates
+`point` now means an extended index with the thumb relaxed or tucked.
+`index_thumb` adds a straight sideways thumb. Contact is not part of the
+click definition, so the former fingertip-contact gates are no longer used.
+The feature schema stays unchanged, preserving compatibility with saved data.
 
-`pinch` and `pinch_right` are defined by fingertips *touching*, but a classifier
-learns whatever separates its training data, which is not the same thing. In
-S01+S02 every recorded pinch had a normalized thumb-index distance below 0.69
-and every point above 1.02, leaving the 0.69–1.02 band completely unlabelled —
-and that band is exactly what a hand crosses while a thumb approaches a finger.
-The learned boundary there was arbitrary extrapolation, so a click could fire
-before contact.
-
-The runtime therefore measures the distance and vetoes a predicted contact
-gesture when the fingers are apart, falling through to the best non-contact
-class (usually `point`) so pointer movement is not interrupted. Limits are
-calibrated per operator at training time from their own recorded pinches —
-p99 x 1.20 to enter, x 1.55 to release — because hand proportions differ. The
-percentile rather than the maximum keeps one mistracked frame from widening the
-gate permanently.
-
-Measured effect on an interpolated approach, thumb closing toward index:
-
-| thumb-index distance | model alone | with the gate |
-| --- | --- | --- |
-| 1.015 | point | point |
-| 0.848 | **pinch** | point |
-| 0.697 | pinch | pinch |
-
-The gate rejects none of the genuine recorded pinches. The protocol also now
-asks for close-but-not-touching thumb poses during `point` and `none` trials, so
-future sessions supervise the zone directly instead of relying on the veto alone.
-
-Motion-dependent behaviour is unchanged and still lives outside the model:
-`PinchTracker` distinguishes click from drag, `PalmSwipeTracker` turns a held
-palm into a directional swipe, `ScrollTracker` integrates vertical movement.
-The model only answers "what shape is this hand, right now".
+Motion-dependent behaviour remains outside the model: `ClickTracker` emits
+one click on release, `PalmSwipeTracker` recognizes directional swipes, and
+`ScrollTracker` integrates vertical movement. Click debounce, tracking-loss
+cancellation, either-hand support, and the voice/controls guards are preserved.
 
 ## Training
 
@@ -260,8 +319,13 @@ original geometric rules and says so on stdout.
 | `augment.py` | Training-time augmentation |
 | `train.py` | Training, evaluation, `.npz` export |
 | `selftest.py` | Camera-free end-to-end pipeline check |
+| `migrate_gestures.py` | Remove old point/pinch data while preserving all other classes |
+| `test_gesture_change.py` | Gesture replacement regression checks |
 
-## Results
+## Results (previous gesture set, before replacement)
+
+These scores describe the original model, including the retired pinch classes.
+They are not measurements of the new click gesture.
 
 Three sessions from one participant (P001), recorded on separate occasions with
 the lighting and seating changed between them. S03 was held out entirely:
