@@ -38,8 +38,6 @@
       <div class="media-icon"><span class="first">▶</span><span class="second">Ⅱ</span></div>
     {:else if kind === 'overview'}
       <div class="tasks">{#each [1,2,3,4] as task}<i></i>{/each}</div>
-    {:else if kind === 'lock'}
-      <div class="lock-icon"><span class="first">🔓</span><span class="second">🔒</span></div>
     {:else if kind === 'voice'}
       <div class="voice-result"><div class="wave">{#each [12,24,34,18,28] as height}<i style:height={`${height}px`}></i>{/each}</div><span class="transcript">Hello there.</span></div>
     {/if}
@@ -56,7 +54,7 @@
   .click-target{height:45px;width:45px;background:white;border:1px solid #c7d4bf;border-radius:50%;display:grid;place-items:center}.click-target span{height:22px;width:22px;background:#93b17f;border-radius:50%;animation:click 4.8s infinite}
   .document{height:62px;width:60px;background:#fff;border:1px solid #d2dbcd;border-radius:6px;padding:8px;overflow:hidden}.document div{animation:scroll 4.8s infinite}.document i{display:block;height:4px;background:#cbd9c1;margin:7px 0;border-radius:2px}
   .screen{width:78px;height:55px;border:1px solid #d2dbcd;border-radius:6px;background:white;padding:12px;animation:blackout 4.8s infinite}.screen i{display:block;background:#cedcc4;height:4px;margin:5px 0;animation:out 4.8s infinite}
-  .media-icon,.lock-icon{width:60px;height:60px;position:relative}.media-icon span,.lock-icon span{position:absolute;inset:0;display:grid;place-items:center;font-size:34px;color:#38563e}
+  .media-icon{width:60px;height:60px;position:relative}.media-icon span{position:absolute;inset:0;display:grid;place-items:center;font-size:34px;color:#38563e}
   .tasks{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;animation:overview 4.8s infinite}.tasks i{width:29px;height:22px;border:1px solid #aabd9f;background:white;border-radius:4px}
   .voice-result{position:relative;width:90px;height:55px}.wave{height:55px;display:flex;align-items:center;justify-content:center;gap:4px;animation:out 4.8s infinite}.wave i{width:4px;border-radius:5px;background:#638252;animation:wave 1s ease-in-out infinite alternate}.wave i:nth-child(2n){animation-delay:-.5s}.transcript{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:#38563e;font-weight:550;animation:in 4.8s infinite}
   .swipe .gesture span{animation:swipe 4.8s infinite}.scroll .gesture svg{animation:scroll-hand 4.8s infinite}

@@ -92,7 +92,7 @@
       "far"
     ],
     "repetitions": 2,
-    "note": "The left hand uses open_palm for controls lock, fist for voice recording, and index_thumb for left click. Keep the same click pose as on the right hand."
+    "note": "The left hand uses fist for voice recording and index_thumb for left click. Keep the same click pose as on the right hand. Open-palm samples provide negative examples for these actions."
   },
   "timing": {
     "countdown_seconds": 2,

@@ -40,7 +40,6 @@ SMOOTH             = 0.35  # pointer smoothing
 # Open-palm probability accepted by the swipe tracker. Deliberately below the
 # model's own decision threshold: swiping favours recall, see the call site.
 SWIPE_PALM_CONFIDENCE = 0.35
-PALM_HOLD_FRAMES   = 24    # deliberate left-palm hold toggles presentation controls
 FIST_HOLD_FRAMES   = 15    # left-hand frames needed to start/stop recording
 
 # Fraction of the camera frame (each side) that is ignored.
@@ -303,8 +302,6 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
     last_space_t = 0.0
 
     presentation_enabled = True
-    left_palm_count    = 0
-    left_palm_held     = False
     last_action        = ""
     last_action_until  = 0.0
 
@@ -382,24 +379,12 @@ def run(app_config: AppConfig | None = None, stop_event=None, ui_queue=None):
                     simple_status = "Simple mode: no hands detected — show either hand fully in the camera"
                 active_gesture = Gesture.NONE
             else:
-                # ── Left hand: deliberate safety lock ─────────────────────
+                # ── Left hand: classify click and voice poses ─────────────
                 left_gesture = Gesture.NONE
                 if left_lms:
                     left_gesture, _ = left_classifier.classify(left_lms, left_world, aspect)
                 else:
                     left_classifier.reset()
-
-                if left_gesture == Gesture.OPEN_PALM:
-                    left_palm_count = min(left_palm_count + 1, PALM_HOLD_FRAMES)
-                else:
-                    left_palm_count = max(left_palm_count - 1, 0)
-
-                palm_held = left_palm_count >= PALM_HOLD_FRAMES
-                if palm_held and not left_palm_held:
-                    presentation_enabled = not presentation_enabled
-                    last_action = "CONTROLS ON" if presentation_enabled else "CONTROLS LOCKED"
-                    last_action_until = time.monotonic() + 1.5
-                left_palm_held = palm_held
 
                 # ── Left hand: fist → start/stop speech recording ─────────
                 if recognizer is not None and left_gesture == Gesture.FIST:

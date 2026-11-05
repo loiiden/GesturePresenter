@@ -29,7 +29,6 @@ Windows, or Linux and restored the next time the app starts.
 | Right | Thumb up | Play/pause media |
 | Right | Held V sign | Mission Control/task overview |
 | **Left** | **Index straight + thumb out sideways; release** | **Left click — same as the right hand** |
-| Left | Held open palm | Lock/unlock gesture controls |
 | Left | Hold fist and speak, then release | Transcribe and paste automatically |
 
 Either hand can click. Hold the index-and-thumb L shape, then tuck the thumb

@@ -12,7 +12,6 @@
     { title: 'Black screen', kind: 'black', emoji: '✊', hint: 'Right hand · hold a fist to toggle.' },
     { title: 'Play / pause', kind: 'media', emoji: '👍', hint: 'Right hand · hold a thumbs-up.' },
     { title: 'Task overview', kind: 'overview', emoji: '✌️', hint: 'Right hand · hold a wide V sign.' },
-    { title: 'Lock / unlock', kind: 'lock', emoji: '🖐️', hint: 'Left hand · hold an open palm.' },
     { title: 'Speak and paste', kind: 'voice', emoji: '✊', hint: 'Left hand · hold a fist and speak. Release to paste. Requires the voice edition.' },
   ];
 </script>
@@ -33,7 +32,7 @@
     <p class="description">Turn off Simple mode in the app to use these controls.</p>
     <div class="controls">
       {#each controls as control}
-        <article><GesturePreview kind={control.kind} emoji={control.emoji} left={control.kind === 'lock' || control.kind === 'voice'} /><div class="card-copy"><h3>{control.title}</h3><p>{control.hint}</p></div></article>
+        <article><GesturePreview kind={control.kind} emoji={control.emoji} left={control.kind === 'voice'} /><div class="card-copy"><h3>{control.title}</h3><p>{control.hint}</p></div></article>
       {/each}
     </div>
   </details>

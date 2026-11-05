@@ -302,8 +302,8 @@ actions genuinely want different precision/recall trade-offs, and probabilities
 are how you get them from one model.
 
 Both hands run through the model. The left hand is mirrored into the right
-hand's frame, so a single model serves the control hand, the controls lock
-(`open_palm`) and the voice trigger (`fist`). Each hand keeps its own smoothing
+hand's frame, so a single model serves the right-hand controls, left-hand click
+(`index_thumb`) and voice trigger (`fist`). Each hand keeps its own smoothing
 state.
 
 If `models/gesture_mlp.npz` is missing, `hand_tracker.py` falls back to the
@@ -357,8 +357,8 @@ The rules fail where the product actually hurts:
 | `v_sign` | 0.81 | 1.00 | missed Mission Control |
 
 **Left hand:** 18/18 correct on the held-out session, classified by mirroring
-right-hand training data into the left hand's frame. The controls lock and voice
-trigger have no left-hand training examples of their own.
+right-hand training data into the left hand's frame. The open-palm and fist
+poses in this evaluation have no left-hand training examples of their own.
 
 ## Scope
 

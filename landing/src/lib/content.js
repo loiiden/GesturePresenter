@@ -24,7 +24,6 @@ export const gestures = [
   { gesture: 'Hold a fist', action: 'Toggle black screen' },
   { gesture: 'Thumb up', action: 'Play or pause media' },
   { gesture: 'Hold a V sign', action: 'Open task overview' },
-  { gesture: 'Left open palm', action: 'Lock or unlock controls' },
   { gesture: 'Left fist + speak', action: 'Transcribe and paste speech (voice edition)' },
 ];
 
